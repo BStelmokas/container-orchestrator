@@ -11,9 +11,8 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/client"
-	"github.com/docker/go-connections/nat/"
+	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 )
 
 // Manages Docker containers via the Docker API
@@ -36,7 +35,7 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 	ctx := context.Background()
 
 	// Pull image from Docker Hub if not available
-	reader, err := m.cli.ImagePull(ctx, imageName, image.PullOptions{})
+	reader, err := m.cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to pull image: %w", err)
 	}
@@ -44,7 +43,7 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 	io.Copy(io.Discard, reader) // drain the response body to complete the pull
 
 	// Remove any existing container with the same name if exists
-	_ = m.cli.ContainerRemove(ctx, containerName, container.RemoveOptions{
+	_ = m.cli.ContainerRemove(ctx, containerName, types.ContainerRemoveOptions{
 		Force: true, // Kill if running
 	})
 
@@ -56,7 +55,7 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 	}
 	// Define how container ports map to host machine (localhost)
 	hostConfig := &container.HostConfig{
-		portBindings := nat.PortMap{
+		PortBindings: nat.PortMap{
 			"80/tcp": []nat.PortBinding{
 				{
 					HostIP: "127.0.0.1", // Limit binding to localhost only
@@ -76,7 +75,7 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 	}
 
 	// Start container
-	if err := m.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
+	if err := m.cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		return "", fmt.Errorf("failed to start container %w", err)
 	}
 
@@ -101,7 +100,7 @@ func (m *ContainerManager) StopContainer(containerID string) error {
 // Lists all containers
 func (m *ContainerManager) ListContainers() ([]types.Container, error) {
 	ctx := context.Background()
-	containers, err := m.cli.ContainerList(ctx, container.ListOptions{All: true})
+	containers, err := m.cli.ContainerList(ctx, types.ContainerListOptions{All: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
@@ -137,7 +136,7 @@ func (m *ContainerManager) StartHealthMonitor(containerID, containerName, imageN
 					log.Printf("[HealthCheck] Container restarted successfully. New ID: %s", newID[:12])
 				}
 
-				m.mu.Unblock()
+				m.mu.Unlock()
 			} else {
 				log.Printf("[HealthCheck] OK (status: %d)", resp.StatusCode)
 			}
@@ -146,5 +145,5 @@ func (m *ContainerManager) StartHealthMonitor(containerID, containerName, imageN
 				resp.Body.Close()
 			}
 		}
-	}
+	}()
 }

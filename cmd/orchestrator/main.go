@@ -4,12 +4,13 @@ import (
     "fmt"
     "log"
 
-    "github.com/herodotus9719/container-manager"
+    "orchestrator/internal/manager"
+
 
 )
 
 func main() {
-	manager, err := NewContainerManager()
+	manager, err := manager.NewContainerManager()
 	if err != nil {
 		log.Fatalf("Error creating container manager: %v", err)
 	}

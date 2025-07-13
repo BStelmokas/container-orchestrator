@@ -1,6 +1,6 @@
 package main
 
-import "containercli/cmd"
+import "cli/cmd"
 
 func main() {
 	cmd.Execute()
