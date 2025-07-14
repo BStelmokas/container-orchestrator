@@ -38,8 +38,21 @@ func (c *Client) Register(name, ip string, port int) error {
 	return nil
 }
 
-// Deregister is a placeholder for later
+// Deregister a service from the registry.
 func (c *Client) Deregister(name string) error {
-	// TODO: implement /deregister
+	endpoint := c.BaseURL + "/deregister"
+	values := url.Values{}
+	values.Set("name", name)
+
+	resp, err := http.Get(endpoint + "?" + values.Encode())
+	if err != nil {
+		return fmt.Errorf("deregister failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("deregister returned %s", resp.Status)
+	}
+
 	return nil
 }

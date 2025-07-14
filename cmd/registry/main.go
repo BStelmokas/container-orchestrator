@@ -14,6 +14,7 @@ var reg = registry.NewRegistry()
 func main() {
 	http.HandleFunc("/register", handleRegister)
 	http.HandleFunc("/lookup", handleLookup)
+	http.HandleFunc("/deregister", handleDeregister)
 
 	log.Println("Service Registry running on :8000")
 	if err := http.ListenAndServe(":8000", nil); err != nil {
@@ -57,4 +58,17 @@ func handleLookup(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(entry)
+}
+
+func handleDeregister(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "Missing 'name' parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Remove service from registry
+	reg.Delete(name)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Deregistered service"))
 }

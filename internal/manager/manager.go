@@ -13,12 +13,15 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+
+	"orchestrator/internal/registry"
 )
 
 // ContainerManager manages Docker containers via the Docker API.
 type ContainerManager struct {
-	cli *client.Client
-	mu  sync.Mutex // Protects container restart logic to avoid race conditions
+	cli      *client.Client
+	mu       sync.Mutex // Protects container restart logic to avoid race conditions
+	registry *registry.Client
 }
 
 // NewContainerManager creates a new Docker client using environment configuration.
@@ -27,7 +30,13 @@ func NewContainerManager() (*ContainerManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ContainerManager{cli: cli}, nil
+
+	reg := registry.NewClient("http://localhost:8000")
+
+	return &ContainerManager{
+		cli:      cli,
+		registry: reg,
+	}, nil
 }
 
 // StartContainer starts a container with the specified image name.
@@ -79,7 +88,37 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 		return "", fmt.Errorf("failed to start container %w", err)
 	}
 
+	// After starting the container, register it with the service registry
+	ip := "127.0.0.1" // Binding to localhost
+	port := 80
+
+	if err := m.registry.Register(containerName, ip, port); err != nil {
+		log.Printf("[Registry] Failed to register service %q: %v", containerName, err)
+	} else {
+		log.Printf("[Registry] Registered service %q at %s:%d", containerName, ip, port)
+	}
+
 	return resp.ID, nil
+}
+
+// GetContainerName looks up the container's name using its ID via Docker Inspect.
+// It returns the name without leading "/" (e.g., "my-nginx" instead of "/my-nginx").
+func (m *ContainerManager) GetContainerName(containerID string) (string, error) {
+	ctx := context.Background()
+
+	// Use Docker API to inspect the container by ID
+	containerJSON, err := m.cli.ContainerInspect(ctx, containerID)
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect container: %w", err)
+	}
+
+	// Docker names are returned like "/my-nginx" -> remove leading "/"
+	name := containerJSON.Name
+	if len(name) > 0 && name[0] == '/' {
+		name = name[1:]
+	}
+
+	return name, nil
 }
 
 // StopContainer gracefully stops a running container by ID or name.
@@ -92,6 +131,20 @@ func (m *ContainerManager) StopContainer(containerID string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
+	}
+
+	// Resolve container name from its ID
+	name, err := m.GetContainerName(containerID)
+	if err != nil {
+		log.Printf("[Registry] Could not resolve name for container ID %s: %v", containerID[:12], err)
+		return nil // Still return nil so StopContainer isn't considered a failure
+	}
+
+	// Deregister the service from the registry
+	if err := m.registry.Deregister(name); err != nil {
+		log.Printf("[Registry] Failed to deregister service %q: %v", name, err)
+	} else {
+		log.Printf("[Registry] Deregistered service %q", name)
 	}
 
 	return nil

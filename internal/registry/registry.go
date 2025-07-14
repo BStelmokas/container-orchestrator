@@ -47,3 +47,10 @@ func (r *ServiceRegistry) Lookup(name string) (ServiceEntry, bool) {
 	entry, ok := r.services[name]
 	return entry, ok
 }
+
+// Delete removes a service from the registry by name.
+func (r *ServiceRegistry) Delete(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.services, name)
+}
