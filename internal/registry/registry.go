@@ -7,15 +7,15 @@ import (
 
 // ServiceEntry represents a registered service.
 type ServiceEntry struct {
-	Name string
-	IP string
-	Port int
-	LastCheck time.Time // Used for TTL or heartbeat epiration
+	Name      string    `json:"name"`
+	IP        string    `json:"ip"`
+	Port      int       `json:"port"`
+	LastCheck time.Time `json:"last_check"` // Used for TTL or heartbeat expiration
 }
 
 // ServiceRegistry keeps track of registered services.
 type ServiceRegistry struct {
-	mu sync.RWMutex
+	mu       sync.RWMutex
 	services map[string]ServiceEntry
 }
 
@@ -32,9 +32,9 @@ func (r *ServiceRegistry) Register(name, ip string, port int) {
 	defer r.mu.Unlock()
 
 	r.services[name] = ServiceEntry{
-		Name: name,
-		IP: ip,
-		Port: port,
+		Name:      name,
+		IP:        ip,
+		Port:      port,
 		LastCheck: time.Now(),
 	}
 }

@@ -18,7 +18,7 @@ import (
 // ContainerManager manages Docker containers via the Docker API.
 type ContainerManager struct {
 	cli *client.Client
-	mu sync.Mutex // Protects container restart logic to avoid race conditions
+	mu  sync.Mutex // Protects container restart logic to avoid race conditions
 }
 
 // NewContainerManager creates a new Docker client using environment configuration.
@@ -58,8 +58,8 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 		PortBindings: nat.PortMap{
 			"80/tcp": []nat.PortBinding{
 				{
-					HostIP: "127.0.0.1", // Limit binding to localhost only
-					HostPort: "80",     // Expose as http://localhost:80
+					HostIP:   "127.0.0.1", // Limit binding to localhost only
+					HostPort: "80",        // Expose as http://localhost:80
 				},
 			},
 		},
@@ -67,9 +67,9 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 
 	// Create container with networking setup
 	resp, err := m.cli.ContainerCreate(ctx, &container.Config{
-			Image: imageName,
-			ExposedPorts: exposedPorts, // So Docker knows port 80 is in use
-		}, hostConfig, nil, nil, containerName)
+		Image:        imageName,
+		ExposedPorts: exposedPorts, // So Docker knows port 80 is in use
+	}, hostConfig, nil, nil, containerName)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)
 	}

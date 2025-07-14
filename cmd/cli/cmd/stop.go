@@ -10,9 +10,9 @@ import (
 )
 
 var stopCmd = &cobra.Command{
-	Use: "stop [container_id_or_name]",
+	Use:   "stop [container_id_or_name]",
 	Short: "Stop a running container by ID or name",
-	Args: cobra.ExactArgs(1), // Requires exactly one argument
+	Args:  cobra.ExactArgs(1), // Requires exactly one argument
 	Run: func(cmd *cobra.Command, args []string) {
 		containerID := args[0]
 

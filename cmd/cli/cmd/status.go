@@ -10,9 +10,9 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use: "status [container_id_or_name]",
+	Use:   "status [container_id_or_name]",
 	Short: "Status of a specific container by ID or name",
-	Args: cobra.ExactArgs(1), // Ensures one argument is passed
+	Args:  cobra.ExactArgs(1), // Ensures one argument is passed
 	Run: func(cmd *cobra.Command, args []string) {
 		containerID := args[0]
 

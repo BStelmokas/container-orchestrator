@@ -1,12 +1,10 @@
 package main
 
 import (
-    "fmt"
-    "log"
+	"fmt"
+	"log"
 
-    "orchestrator/internal/manager"
-
-
+	"orchestrator/internal/manager"
 )
 
 func main() {

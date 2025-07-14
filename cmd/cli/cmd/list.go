@@ -10,7 +10,7 @@ import (
 )
 
 var listCmd = &cobra.Command{
-	Use: "list",
+	Use:   "list",
 	Short: "List all containers (running and stopped)",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("List containers...")

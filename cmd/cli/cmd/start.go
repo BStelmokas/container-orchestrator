@@ -10,12 +10,12 @@ import (
 )
 
 var (
-	imageName string
+	imageName     string
 	containerName string
 )
 
 var startCmd = &cobra.Command{
-	Use: "start",
+	Use:   "start",
 	Short: "Start a container",
 	Run: func(cmd *cobra.Command, args []string) {
 		mgr, err := manager.NewContainerManager()
