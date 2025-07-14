@@ -1,21 +1,15 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
-	Use: "containercli",
-	Short: "A simple CLI for managing Docker containers",
+	Use: "cli",
+	Short: "A CLI to manage Docker containers: start, stop, loop, list, and status",
 }
 
-// Runs the root command
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+// Adds all subcommands and runs the root
+func Execute() error {
+	return rootCmd.Execute()
 }

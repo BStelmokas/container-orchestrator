@@ -1,7 +1,13 @@
 package main
 
-import "cli/cmd"
+import (
+	"log"
+
+	"orchestrator/cmd/cli/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	if err := cmd.Execute(); err != nil {
+		log.Fatalf("CLI error: %v", err)
+	}
 }
