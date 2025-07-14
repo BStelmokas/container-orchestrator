@@ -15,13 +15,13 @@ import (
 	"github.com/docker/go-connections/nat"
 )
 
-// ContainerManager manages Docker containers via the Docker API
+// ContainerManager manages Docker containers via the Docker API.
 type ContainerManager struct {
 	cli *client.Client
 	mu sync.Mutex // Protects container restart logic to avoid race conditions
 }
 
-// NewContainerManager creates a new Docker client using environment configuration
+// NewContainerManager creates a new Docker client using environment configuration.
 func NewContainerManager() (*ContainerManager, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -30,7 +30,7 @@ func NewContainerManager() (*ContainerManager, error) {
 	return &ContainerManager{cli: cli}, nil
 }
 
-// StartContainer starts a container with the specified image name
+// StartContainer starts a container with the specified image name.
 func (m *ContainerManager) StartContainer(imageName, containerName string) (string, error) {
 	ctx := context.Background()
 
@@ -82,7 +82,7 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 	return resp.ID, nil
 }
 
-// Gracefully stops a running container by ID or name
+// StopContainer gracefully stops a running container by ID or name.
 func (m *ContainerManager) StopContainer(containerID string) error {
 	ctx := context.Background()
 
@@ -97,7 +97,7 @@ func (m *ContainerManager) StopContainer(containerID string) error {
 	return nil
 }
 
-// ListContainers lists all containers
+// ListContainers lists all containers.
 func (m *ContainerManager) ListContainers() ([]types.Container, error) {
 	ctx := context.Background()
 	containers, err := m.cli.ContainerList(ctx, types.ContainerListOptions{All: true})
@@ -109,7 +109,7 @@ func (m *ContainerManager) ListContainers() ([]types.Container, error) {
 }
 
 // StartHealthMonitor starts a background goroutine that checks the health of a container's HTTP endpoint
-// every 30 seconds. If the check fails, the container is restarted
+// every 30 seconds. If the check fails, the container is restarted.
 func (m *ContainerManager) StartHealthMonitor(containerID, containerName, imageName, healthURL string) {
 	go func() {
 		for {

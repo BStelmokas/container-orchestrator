@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Represents a registered service
+// ServiceEntry represents a registered service.
 type ServiceEntry struct {
 	Name string
 	IP string
@@ -13,20 +13,20 @@ type ServiceEntry struct {
 	LastCheck time.Time // Used for TTL or heartbeat epiration
 }
 
-// ServiceRegistry keeps track of registered services
+// ServiceRegistry keeps track of registered services.
 type ServiceRegistry struct {
 	mu sync.RWMutex
 	services map[string]ServiceEntry
 }
 
-// Creates a new in-memory service registry
+// NewRegistry creates a new in-memory service registry.
 func NewRegistry() *ServiceRegistry {
 	return &ServiceRegistry{
 		services: make(map[string]ServiceEntry),
 	}
 }
 
-// Adds or updates a service in the registry
+// Register adds or updates a service in the registry.
 func (r *ServiceRegistry) Register(name, ip string, port int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -39,7 +39,7 @@ func (r *ServiceRegistry) Register(name, ip string, port int) {
 	}
 }
 
-// Retrieves a service by name
+// Lookup retrieves a service by name.
 func (r *ServiceRegistry) Lookup(name string) (ServiceEntry, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
