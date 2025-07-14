@@ -19,7 +19,7 @@ type ServiceRegistry struct {
 	services map[string]ServiceEntry
 }
 
-// NewRegistry creates a new in-memory service registry.
+// NewRegistry returns a new in-memory service registry.
 func NewRegistry() *ServiceRegistry {
 	return &ServiceRegistry{
 		services: make(map[string]ServiceEntry),
@@ -44,6 +44,6 @@ func (r *ServiceRegistry) Lookup(name string) (ServiceEntry, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	entry, exists := r.services[name]
-	return entry, exists
+	entry, ok := r.services[name]
+	return entry, ok
 }
