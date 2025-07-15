@@ -15,6 +15,7 @@ func main() {
 	http.HandleFunc("/register", handleRegister)
 	http.HandleFunc("/lookup", handleLookup)
 	http.HandleFunc("/deregister", handleDeregister)
+	http.HandleFunc("/lookup-all", handleLookupAll)
 
 	log.Println("Service Registry running on :8000")
 	if err := http.ListenAndServe(":8000", nil); err != nil {
@@ -71,4 +72,25 @@ func handleDeregister(w http.ResponseWriter, r *http.Request) {
 	reg.Delete(name)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Deregistered service"))
+}
+
+func handleLookupAll(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "Missing 'name' parameter", http.StatusBadRequest)
+		return
+	}
+
+	// For now, pretend we only support 1 instance per name
+	entry, found := reg.Lookup(name)
+	if !found {
+		http.Error(w, "Service not found", http.StatusNotFound)
+		return
+	}
+
+	// Return as a slice of one element
+	entries := []registry.ServiceEntry{entry}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(entries)
 }
