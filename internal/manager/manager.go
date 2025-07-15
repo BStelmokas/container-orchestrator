@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -56,19 +57,17 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 		Force: true, // Kill if running
 	})
 
-	// Port binding setup: expose container port 80 to host port 80 on localhost
-
-	// Define which ports the container exposes internally
+	// Expose container port 80 internally
 	exposedPorts := nat.PortSet{
 		"80/tcp": struct{}{},
 	}
-	// Define how container ports map to host machine (localhost)
+	// Use dynamic host port: let Docker bind an available port
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{
 			"80/tcp": []nat.PortBinding{
 				{
-					HostIP:   "127.0.0.1", // Limit binding to localhost only
-					HostPort: "80",        // Expose as http://localhost:80
+					HostIP:   "0.0.0.0", // Bind on all interfaces
+					HostPort: "",        // Let Docker pick a random available host port
 				},
 			},
 		},
@@ -88,15 +87,47 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 		return "", fmt.Errorf("failed to start container %w", err)
 	}
 
-	// After starting the container, register it with the service registry
-	ip := "127.0.0.1" // Binding to localhost
-	port := 80
+	///////////////////////////////////////////////////////////////////////
+	// Inspect container to extract the actual host-mapped port
+	///////////////////////////////////////////////////////////////////////
 
+	inspection, err := m.cli.ContainerInspect(ctx, resp.ID)
+	if err != nil {
+		log.Printf("[Registry] Could not inspect container %s: %v", resp.ID[:12], err)
+		return resp.ID, nil // continue without registering
+	}
+
+	// Docker maps "80/tcp" -> list of host port bindings
+	hostPort := ""
+	bindings := inspection.NetworkSettings.Ports["80/tcp"]
+	if len(bindings) > 0 {
+		hostPort = bindings[0].HostPort
+	}
+
+	if hostPort == "" {
+		log.Printf("[Registry] No host port found for container %s", resp.ID[:12])
+	}
+
+	port, err := strconv.Atoi(hostPort)
+	if err != nil {
+		log.Printf("[Registry] Invalid port for container %s: %v", resp.ID[:12], err)
+		return resp.ID, nil
+	}
+
+	ip := "127.0.0.1" // All ports are on localhost
+
+	// To generate dynamic health check URL
+	healthURL := fmt.Sprintf("http://%s:%d", ip, port)
+
+	// Register using host-assigned port
 	if err := m.registry.Register(containerName, ip, port); err != nil {
 		log.Printf("[Registry] Failed to register service %q: %v", containerName, err)
 	} else {
 		log.Printf("[Registry] Registered service %q at %s:%d", containerName, ip, port)
 	}
+
+	// To health-check each container
+	m.StartHealthMonitor(resp.ID, containerName, imageName, healthURL)
 
 	return resp.ID, nil
 }
@@ -171,9 +202,18 @@ func (m *ContainerManager) StartHealthMonitor(containerID, containerName, imageN
 			log.Printf("[HealthCheck] Checking %s...", healthURL)
 
 			resp, err := http.Get(healthURL)
-			if err != nil || resp.StatusCode >= 400 {
-				log.Printf("[HealthCheck] FAILED (status: %v, err: %v)", resp.StatusCode, err)
 
+			// Handle failures first: prevent panic by checking if resp is nil
+			if err != nil {
+				log.Printf("[HealthCheck] FAILED (unreachable, err: %v)", err)
+			} else if resp.StatusCode >= 400 {
+				log.Printf("[HealthCheck] FAILED (bad status: %d)", resp.StatusCode)
+			} else {
+				log.Printf("[HealthCheck] OK (status: %d)", resp.StatusCode)
+			}
+
+			// If health check failed, restart container
+			if err != nil || (resp != nil && resp.StatusCode >= 400) {
 				m.mu.Lock()
 
 				if stopErr := m.StopContainer(containerID); stopErr != nil {
@@ -189,10 +229,9 @@ func (m *ContainerManager) StartHealthMonitor(containerID, containerName, imageN
 				}
 
 				m.mu.Unlock()
-			} else {
-				log.Printf("[HealthCheck] OK (status: %d)", resp.StatusCode)
 			}
 
+			// Only close response if it was returned
 			if resp != nil {
 				resp.Body.Close()
 			}
