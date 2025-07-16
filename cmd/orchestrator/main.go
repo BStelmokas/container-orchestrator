@@ -170,6 +170,26 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"containers": result})
 	})
 
+	// GET /logs/:name
+	r.GET("/logs/:name", func(c *gin.Context) {
+		name := c.Param("name")
+		containers, err := manager.ListContainers()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list containers"})
+			return
+		}
+		var logs map[string]string = make(map[string]string)
+		for _, cont := range containers {
+			if strings.HasPrefix(cont.Names[0], "/"+name) {
+				out, err := manager.FetchLogs(cont.ID)
+				if err == nil {
+					logs[cont.ID[:12]] = out
+				}
+			}
+		}
+		c.JSON(http.StatusOK, logs)
+	})
+
 	// Block forever so the health monitor goroutine doesn't exit + controller keeps running
 	select {}
 }
