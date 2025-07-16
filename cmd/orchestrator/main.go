@@ -144,7 +144,13 @@ func main() {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid replica count"})
 			return
 		}
-
+		spec := orchestrator.ServiceSpec{
+			Name:     name,
+			Image:    "nginx:latest",
+			Replicas: n,
+		}
+		controller.Deploy(spec)
+		c.JSON(http.StatusOK, gin.H{"status": "scaled", "replicas": n})
 	})
 
 	// Block forever so the health monitor goroutine doesn't exit + controller keeps running
