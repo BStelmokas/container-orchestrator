@@ -7,14 +7,15 @@ import (
 	"math"
 	"strings"
 	"time"
-
 	"context"
+	"net/http"
 
 	"orchestrator/internal/manager"
 	"orchestrator/internal/orchestrator"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -116,6 +117,22 @@ func main() {
 			}
 		}
 	}()
+
+	////////////////////////////////////////////////////////////////////////
+	// REST API using Gin
+
+	r := gin.Default()
+
+	// POST /deploy
+	r.POST.("/deploy", func(c *gin.Context)) {
+		var req orchestrator.ServiceSpec
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+			return
+		}
+		controller.Deploy(req)
+		c.JSON(http.StatusOK, gin.H{"status": "deployment started", "service": req.Name})
+	}
 
 	// Block forever so the health monitor goroutine doesn't exit + controller keeps running
 	select {}
