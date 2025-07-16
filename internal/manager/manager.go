@@ -237,3 +237,28 @@ func (m *ContainerManager) StartHealthMonitor(containerID, containerName, imageN
 		}
 	}()
 }
+
+// FetchLogs retrieves the logs for the specified container ID.
+func (m *ContainerManager) FetchLogs(containerID string) (string, error) {
+	ctx := context.Background()
+
+	// Request container logs (both stdout and stderr, no timestamps)
+	reader, err := m.cli.ContainerLogs(ctx, containerID, types.ContainerLogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Timestamps: false,
+		Tail:       "100", // limit to last 100 lines
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch logs: %w", err)
+	}
+	defer reader.Close()
+
+	// Read all logs into a string
+	logs, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read logs: %w", err)
+	}
+
+	return string(logs), nil
+}
