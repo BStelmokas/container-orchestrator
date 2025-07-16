@@ -27,10 +27,14 @@ type ContainerManager struct {
 
 // NewContainerManager creates a new Docker client using environment configuration.
 func NewContainerManager() (*ContainerManager, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithVersion("1.41"), // explicitly use Docker API v1.41 (previous compatibility issues)
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create Docker client: %w", err)
 	}
+	log.Printf("[Docker] Client version: %s", cli.ClientVersion())
 
 	reg := registry.NewClient("http://localhost:8000")
 
@@ -105,6 +109,7 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 
 	if hostPort == "" {
 		log.Printf("[Registry] No host port found for container %s", resp.ID[:12])
+		return resp.ID, nil // stop it to avoid the empty string flowing into strconv.Atoi()
 	}
 
 	port, err := strconv.Atoi(hostPort)
@@ -156,9 +161,10 @@ func (m *ContainerManager) StopContainer(containerID string) error {
 	ctx := context.Background()
 
 	timeout := 10 // Timeout in seconds before force-killing the container
-	err := m.cli.ContainerStop(ctx, containerID, container.StopOptions{
-		Timeout: &timeout,
-	})
+	timeoutDuration := time.Duration(timeout) * time.Second
+	// Using an older version of ContainerStop to be compatible with Docker API v1.41
+	// In Docker SDK <= v20.10.x, ContainerStop uses a *duration instead of StopOptions
+	err := m.cli.ContainerStop(ctx, containerID, &timeoutDuration)
 	if err != nil {
 		return fmt.Errorf("failed to stop container: %w", err)
 	}
@@ -213,6 +219,14 @@ func (m *ContainerManager) StartHealthMonitor(containerID, containerName, imageN
 
 			// If health check failed, restart container
 			if err != nil || (resp != nil && resp.StatusCode >= 400) {
+				// Before trying to stop or restart, confirm the container still exists
+				ctx := context.Background()
+				_, err := m.cli.ContainerInspect(ctx, containerID)
+				if err != nil {
+					log.Printf("[HealthCheck] Skipping - container %s no longer exits", containerID[:12])
+					continue
+				}
+
 				m.mu.Lock()
 
 				if stopErr := m.StopContainer(containerID); stopErr != nil {
