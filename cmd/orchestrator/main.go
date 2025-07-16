@@ -190,6 +190,8 @@ func main() {
 		c.JSON(http.StatusOK, logs)
 	})
 
+	r.Run(":8080") // starts API server on port 8080
+
 	// Block forever so the health monitor goroutine doesn't exit + controller keeps running
 	select {}
 }
