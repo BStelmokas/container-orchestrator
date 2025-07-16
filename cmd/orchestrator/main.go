@@ -1,12 +1,20 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"math"
+	"strings"
 	"time"
+
+	"context"
 
 	"orchestrator/internal/manager"
 	"orchestrator/internal/orchestrator"
+
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
 )
 
 func main() {
@@ -16,11 +24,9 @@ func main() {
 		log.Fatalf("Error creating container manager: %v", err)
 	}
 
-	// Start a container
-
+	// Start a container for base testing/demo
 	image := "nginx:latest"
 	name := "my-nginx"
-
 	fmt.Println("Starting container...")
 	containerID, err := manager.StartContainer(image, name)
 	if err != nil {
@@ -28,7 +34,7 @@ func main() {
 	}
 	fmt.Printf("Started container with ID: %s\n", containerID[:12])
 
-	// Start monitoring container health
+	// Start monitoring health of that container manually
 	healthURL := "http://localhost:80"
 	manager.StartHealthMonitor(containerID, name, image, healthURL)
 
@@ -43,9 +49,7 @@ func main() {
 	}
 
 	//////////////////////////////////////////////////////////////
-	// Deployment controller logic (desired replica state)
-	//////////////////////////////////////////////////////////////
-
+	// Initialize and start deployment controller (manages desired replica state)
 	controller := orchestrator.NewDeploymentController(manager, 10*time.Second)
 	controller.Start()
 
@@ -53,10 +57,104 @@ func main() {
 	spec := orchestrator.ServiceSpec{
 		Name:     "nginx-service",
 		Image:    "nginx:latest",
-		Replicas: 3, // run 3 copies of this servie at all times
+		Replicas: 3, // run 3 copies of this server at all times
 	}
 	controller.Deploy(spec)
 
+	////////////////////////////////////////////////////////////////////////
+	// Auto-scaling controller: monitors CPU and scales up/down accordingly
+	go func() {
+		for {
+			time.Sleep(15 * time.Second) // Check every 15 seconds
+
+			// List all containers again
+			containers, err := manager.ListContainers()
+			if err != nil {
+				log.Printf("[AutoScale] Failed to list containers: %v", err)
+				continue
+			}
+
+			// Filter containers that match our deployed service name
+			var matching []types.Container
+			for _, c := range containers {
+				if strings.HasPrefix(c.Names[0], "/"+spec.Name) {
+					matching = append(matching, c)
+				}
+			}
+
+			// Skip if none found
+			if len(matching) == 0 {
+				log.Printf("[AutoScale] No containers found for %s", spec.Name)
+				continue
+			}
+
+			// Calculate average CPU usage across replicas
+			avg, err := getAverageCPUUsage(matching)
+			if err != nil {
+				log.Printf("[AutoScale] Error calculating CPU: %v", err)
+				continue
+			}
+
+			log.Printf("[AutoScale] Service=%s, Replicas=%d, AvgCPU=%.2f%%", spec.Name, len(matching), avg)
+
+			if avg > 80.0 {
+				// Scale up: add 1 more replica
+				newSpec := spec
+				newSpec.Replicas++
+				log.Printf("[AutoScale] Scaling UP to %d replicas", newSpec.Replicas)
+				controller.Deploy(newSpec)
+				spec = newSpec // update latest desired state
+			} else if avg < 20.0 && len(matching) > 1 {
+				// Scale down: remove 1 replica
+				newSpec := spec
+				newSpec.Replicas--
+				log.Printf("[AutoScale] Scaling DOWN to %d replicas", newSpec.Replicas)
+				controller.Deploy(newSpec)
+				spec = newSpec
+			} else {
+				log.Printf("[AutoScale] No scaling action needed")
+			}
+		}
+	}()
+
 	// Block forever so the health monitor goroutine doesn't exit + controller keeps running
 	select {}
+}
+
+// getAverageCPUUsage computes the average CPU usage of all given containers.
+func getAverageCPUUsage(containers []types.Container) (float64, error) {
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		return 0, err
+	}
+	defer cli.Close()
+
+	var total float64
+
+	for _, container := range containers {
+		// One-shot stats request
+		resp, err := cli.ContainerStatsOneShot(context.Background(), container.ID)
+		if err != nil {
+			return 0, fmt.Errorf("stats error for container %s: %w", container.ID[:12], err)
+		}
+		defer resp.Body.Close()
+
+		var stats types.StatsJSON
+		if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
+			return 0, fmt.Errorf("decode error: %w", err)
+		}
+
+		cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage)
+		systemDelta := float64(stats.CPUStats.SystemUsage - stats.PreCPUStats.SystemUsage)
+
+		var cpuPercent float64
+		if systemDelta > 0 && cpuDelta > 0 {
+			cpuPercent = (cpuDelta / systemDelta) * float64(len(stats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
+		}
+
+		total += cpuPercent
+	}
+
+	avg := total / float64(len(containers))
+	return math.Round(avg*100) / 100, nil
 }

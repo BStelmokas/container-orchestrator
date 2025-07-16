@@ -89,7 +89,6 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 
 	///////////////////////////////////////////////////////////////////////
 	// Inspect container to extract the actual host-mapped port
-	///////////////////////////////////////////////////////////////////////
 
 	inspection, err := m.cli.ContainerInspect(ctx, resp.ID)
 	if err != nil {
