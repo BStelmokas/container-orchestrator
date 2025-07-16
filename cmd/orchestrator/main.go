@@ -153,6 +153,23 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "scaled", "replicas": n})
 	})
 
+	// GET /status/:name
+	r.GET("/status/:name", func(c *gin.Context) {
+		name := c.Param("name")
+		containers, err := manager.ListContainers()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list containers"})
+			return
+		}
+		var result []string
+		for _, cont := range containers {
+			if strings.HasPrefix(cont.Names[0], "/"+name) {
+				result = append(result, cont.ID[:12]+" ("+cont.Status+")")
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"containers": result})
+	})
+
 	// Block forever so the health monitor goroutine doesn't exit + controller keeps running
 	select {}
 }
