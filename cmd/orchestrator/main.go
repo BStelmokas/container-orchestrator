@@ -1,14 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
-	"context"
-	"net/http"
 
 	"orchestrator/internal/manager"
 	"orchestrator/internal/orchestrator"
@@ -124,7 +125,7 @@ func main() {
 	r := gin.Default()
 
 	// POST /deploy
-	r.POST.("/deploy", func(c *gin.Context)) {
+	r.POST("/deploy", func(c *gin.Context) {
 		var req orchestrator.ServiceSpec
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
@@ -132,7 +133,19 @@ func main() {
 		}
 		controller.Deploy(req)
 		c.JSON(http.StatusOK, gin.H{"status": "deployment started", "service": req.Name})
-	}
+	})
+
+	// POST /scale/:name/:replicas
+	r.POST("/scale/:name/:replicas", func(c *gin.Context) {
+		name := c.Param("name")
+		replicas := c.Param("replicas")
+		n, err := strconv.Atoi(replicas)
+		if err != nil || n < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid replica count"})
+			return
+		}
+
+	})
 
 	// Block forever so the health monitor goroutine doesn't exit + controller keeps running
 	select {}
