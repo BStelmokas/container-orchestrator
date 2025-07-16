@@ -94,10 +94,20 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 	///////////////////////////////////////////////////////////////////////
 	// Inspect container to extract the actual host-mapped port
 
-	inspection, err := m.cli.ContainerInspect(ctx, resp.ID)
-	if err != nil {
-		log.Printf("[Registry] Could not inspect container %s: %v", resp.ID[:12], err)
-		return resp.ID, nil // continue without registering
+	// Retry ContainerInspect to give Docker time to assign ports
+	var inspection types.ContainerJSON
+	for i := 0; i < 5; i++ {
+		inspection, err = m.cli.ContainerInspect(ctx, resp.ID)
+		if err != nil {
+			log.Printf("[StartContainer] Inspect attempt %d failed: %v", i+1, err)
+			time.Sleep(300 * time.Millisecond)
+			continue
+		}
+		// If port mapping is available, break early
+		if len(inspection.NetworkSettings.Ports["80/tcp"]) > 0 {
+			break
+		}
+		time.Sleep(300 * time.Millisecond)
 	}
 
 	// Docker maps "80/tcp" -> list of host port bindings

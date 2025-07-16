@@ -79,37 +79,40 @@ func main() {
 			// Filter containers that match our deployed service name
 			var matching []types.Container
 			for _, c := range containers {
-				if strings.HasPrefix(c.Names[0], "/"+spec.Name) {
+				// Docker container names usually start with "/" - e.g. "/nginx-service-1"
+				if len(c.Names) > 0 && strings.HasPrefix(c.Names[0], "/"+spec.Name) {
 					matching = append(matching, c)
 				}
 			}
 
-			// Skip if none found
+			// Nothing to scale if none found
 			if len(matching) == 0 {
 				log.Printf("[AutoScale] No containers found for %s", spec.Name)
 				continue
 			}
 
 			// Calculate average CPU usage across replicas
-			avg, err := getAverageCPUUsage(matching)
+			avgCPU, err := getAverageCPUUsage(matching)
 			if err != nil {
-				log.Printf("[AutoScale] Error calculating CPU: %v", err)
+				log.Printf("[AutoScale] Error calculating CPU usage: %v", err)
 				continue
 			}
 
-			log.Printf("[AutoScale] Service=%s, Replicas=%d, AvgCPU=%.2f%%", spec.Name, len(matching), avg)
+			log.Printf("[AutoScale] Service=%s, Replicas=%d, AvgCPU=%.2f%%", spec.Name, len(matching), avgCPU)
 
-			if avg > 80.0 {
+			actualReplicas := len(matching)
+
+			if avgCPU > 80.0 {
 				// Scale up: add 1 more replica
 				newSpec := spec
-				newSpec.Replicas++
+				newSpec.Replicas = actualReplicas + 1
 				log.Printf("[AutoScale] Scaling UP to %d replicas", newSpec.Replicas)
 				controller.Deploy(newSpec)
 				spec = newSpec // update latest desired state
-			} else if avg < 20.0 && len(matching) > 1 {
+			} else if avgCPU < 20.0 && actualReplicas > 1 {
 				// Scale down: remove 1 replica
 				newSpec := spec
-				newSpec.Replicas--
+				newSpec.Replicas = actualReplicas - 1
 				log.Printf("[AutoScale] Scaling DOWN to %d replicas", newSpec.Replicas)
 				controller.Deploy(newSpec)
 				spec = newSpec
