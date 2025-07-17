@@ -185,8 +185,10 @@ func main() {
 		for _, cont := range containers {
 			if strings.HasPrefix(cont.Names[0], "/"+name) {
 				out, err := manager.FetchLogs(cont.ID)
-				if err == nil {
-					logs[cont.ID[:12]] = out
+				// Filters the logs
+				filtered := filterNginxAccessLogs(out)
+				if err == nil && strings.TrimSpace(filtered) != "" {
+					logs[cont.ID[:12]] = filtered
 				}
 			}
 		}
@@ -253,4 +255,18 @@ func getAverageCPUUsage(containers []types.Container) (float64, error) {
 
 	avg := total / float64(count)
 	return math.Round(avg*100) / 100, nil
+}
+
+// filterNginxAccessLogs makes the logs less verbose
+func filterNginxAccessLogs(raw string) string {
+	lines := strings.Split(raw, "\n")
+	var out []string
+
+	for _, line := range lines {
+		// Keep only real HTTP access logs that are NOT internal orchestrator health checks
+		if strings.Contains(line, "HTTP/1.1") && !strings.Contains(line, "Go-http-client/1.1") {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
 }

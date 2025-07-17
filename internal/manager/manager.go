@@ -7,12 +7,14 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
 	"orchestrator/internal/registry"
@@ -278,11 +280,19 @@ func (m *ContainerManager) FetchLogs(containerID string) (string, error) {
 	}
 	defer reader.Close()
 
-	// Read all logs into a string
-	logs, err := io.ReadAll(reader)
-	if err != nil {
-		return "", fmt.Errorf("failed to read logs: %w", err)
+	// Prepare output buffers for stdout and stderr
+	var stdoutBuf, stderrBuf io.Writer
+	out := new(strings.Builder)
+	errOut := new(strings.Builder)
+
+	stdoutBuf = out
+	stderrBuf = errOut
+
+	// Copy and demultiplex using Docker's stdcopy helper
+	if _, err := stdcopy.StdCopy(stdoutBuf, stderrBuf, reader); err != nil {
+		return "", fmt.Errorf("failed to decode container logs: %w", err)
 	}
 
-	return string(logs), nil
+	// Combine both stdout and stderr cleanly
+	return out.String() + errOut.String(), nil
 }
