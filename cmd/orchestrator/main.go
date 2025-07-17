@@ -208,31 +208,49 @@ func getAverageCPUUsage(containers []types.Container) (float64, error) {
 	defer cli.Close()
 
 	var total float64
+	var count int
 
 	for _, container := range containers {
 		// One-shot stats request
-		resp, err := cli.ContainerStatsOneShot(context.Background(), container.ID)
+		resp, err := cli.ContainerStats(context.Background(), container.ID, false)
 		if err != nil {
-			return 0, fmt.Errorf("stats error for container %s: %w", container.ID[:12], err)
+			log.Printf("[AutoScale] Failed to get stats for container %s: %v", container.ID[:12], err)
+			continue
 		}
 		defer resp.Body.Close()
 
+		// Decode stats JSON into Docker's native struct
 		var stats types.StatsJSON
 		if err := json.NewDecoder(resp.Body).Decode(&stats); err != nil {
-			return 0, fmt.Errorf("decode error: %w", err)
+			log.Printf("[AutoScale] Failed to decode stats for container %s: %v", container.ID[:12], err)
+			continue
 		}
 
-		cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage)
-		systemDelta := float64(stats.CPUStats.SystemUsage - stats.PreCPUStats.SystemUsage)
+		// Extract CPU usage and system CPU usage
+		cpuDelta := float64(stats.CPUStats.CPUUsage.TotalUsage)
+		systemDelta := float64(stats.CPUStats.SystemUsage)
 
-		var cpuPercent float64
-		if systemDelta > 0 && cpuDelta > 0 {
-			cpuPercent = (cpuDelta / systemDelta) * float64(len(stats.CPUStats.CPUUsage.PercpuUsage)) * 100.0
+		// Count logical CPUs (percpu length)
+		perCPU := len(stats.CPUStats.CPUUsage.PercpuUsage)
+		if perCPU == 0 {
+			perCPU = 1 // fallback for single-core or missing data
 		}
+
+		if cpuDelta == 0 || systemDelta == 0 {
+			log.Printf("[AutoScale] Invalid CPU stats for container %s, skipping", container.ID[:12])
+			continue
+		}
+
+		cpuPercent := (cpuDelta / systemDelta) * float64(perCPU) * 100.0
 
 		total += cpuPercent
+		count++
 	}
 
-	avg := total / float64(len(containers))
+	if count == 0 {
+		return 0, fmt.Errorf("no valid CPU stats from containers")
+	}
+
+	avg := total / float64(count)
 	return math.Round(avg*100) / 100, nil
 }
