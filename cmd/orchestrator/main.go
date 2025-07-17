@@ -127,6 +127,163 @@ func main() {
 
 	r := gin.Default()
 
+	////////////////////////////////////////////////////////////
+	// Serve Static HTML Dashboard
+
+	////////////////////////////////////////////////////////////
+	// Serve dashboard HTML page at "/"
+	// This maps the root path "/" to the static HTMl file on disk:
+	// dashboard/static/dashboard.html
+	r.StaticFile("/", "./dashboard/static/dashboard.html")
+
+	//////////////////////////////////////////////////////////////
+	// Step 3: Add /api/services route
+	//
+	// This route groups running containers by their service prefix.
+	// Example: nginx-service-123456 -> nginx-service
+	// Each service lists its container IDs and statuses.
+	/////////////////////////////////////////////////////////////
+
+	// /api/services
+	r.GET("/api/services", func(c *gin.Context) {
+		containers, err := manager.ListContainers()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list containers"})
+			return
+		}
+
+		// Group containers by service prefix (e.g., "nginx-service")
+		serviceMap := make(map[string][]string)
+
+		for _, cont := range containers {
+			if len(cont.Names) == 0 {
+				continue
+			}
+
+			name := strings.TrimPrefix(cont.Names[0], "/")
+			parts := strings.Split(name, "-")
+			if len(parts) == 0 {
+				continue
+			}
+			service := parts[0] // Extract logical service name
+			label := fmt.Sprintf("%s (%s)", cont.ID[:12], cont.Status)
+			serviceMap[service] = append(serviceMap[service], label)
+		}
+
+		// Build JSON response
+		var result []gin.H
+		for name, list := range serviceMap {
+			result = append(result, gin.H{
+				"name":       name,
+				"containers": list,
+			})
+		}
+
+		c.JSON(http.StatusOK, gin.H{"services": result})
+	})
+	////////////////////////////////////////////////////////////
+	// Add POST /api/scale/:name/:delta
+	//
+	// This endpoint receives a delta (e.g., +1 or -1) and adjusts
+	// The replica count for a given service by that delt.
+	// The container names
+	// are scanned to determine the current replica count
+	////////////////////////////////////////////////////////////
+	// /api/scale/:name/:delta
+	r.POST("/api/scale/:name/:delta", func(c *gin.Context) {
+		name := c.Param("name")
+		deltaStr := c.Param("delta")
+
+		// Convert delta from string to integer
+		delta, err := strconv.Atoi(deltaStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid scale delta"})
+			return
+		}
+
+		// List containers to count current replicas of the given service
+		containers, err := manager.ListContainers()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list containers"})
+			return
+		}
+
+		currentReplicas := 0
+		for _, cont := range containers {
+			if strings.HasPrefix(cont.Names[0], "/"+name) {
+				currentReplicas++
+			}
+		}
+
+		// Compute new desired replica count
+		newReplicas := currentReplicas + delta
+		if newReplicas < 1 {
+			newReplicas = 1 // Always keep at least one replica running
+		}
+
+		// Re-deploy service with updated replica count
+		spec := orchestrator.ServiceSpec{
+			Name:     name,
+			Image:    "nginx:latest", // TODO: Extract from running containers or config
+			Replicas: newReplicas,
+		}
+		controller.Deploy(spec)
+
+		c.JSON(http.StatusOK, gin.H{
+			"service":  name,
+			"replicas": newReplicas,
+			"status":   "scaled successfully",
+		})
+	})
+	////////////////////////////////////////////////////////////
+	// Add POST /api/restart/:name
+	//
+	// This endpoint:
+	// 1. Stops all containers with names like /{name}-*
+	// 2. Then re-deploys the same number of replicas
+	////////////////////////////////////////////////////////////
+	// /api/restart/:name
+	r.POST("/api/restart/:name", func(c *gin.Context) {
+		name := c.Param("name")
+
+		// Get list of all containers
+		containers, err := manager.ListContainers()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list containers"})
+			return
+		}
+
+		// Stop matching containers and count them
+		replicaCount := 0
+		for _, cont := range containers {
+			if strings.HasPrefix(cont.Names[0], "/"+name) {
+				log.Printf("[Restart] Stopping container: %s", cont.ID[:12])
+				_ = manager.StopContainer(cont.ID)
+				replicaCount++
+			}
+		}
+
+		if replicaCount == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no containers found for service " + name})
+			return
+		}
+
+		// Re-deploy the service with the same number of replicas
+		spec := orchestrator.ServiceSpec{
+			Name:     name,
+			Image:    "nginx:latest", // NOTE: Could be extracted dynamically in the future
+			Replicas: replicaCount,
+		}
+		controller.Deploy(spec)
+
+		c.JSON(http.StatusOK, gin.H{
+			"service":  name,
+			"replicas": replicaCount,
+			"status":   "restart triggered",
+		})
+	})
+
+	////////////////////////////////////////////////////////////
 	// POST /deploy
 	r.POST("/deploy", func(c *gin.Context) {
 		var req orchestrator.ServiceSpec
