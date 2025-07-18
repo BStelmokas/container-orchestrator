@@ -12,7 +12,6 @@ import (
 
 /////////////////////////////////////////////////////////
 // Structs and Clients
-/////////////////////////////////////////////////////////
 
 // ServiceEntry represents a single registered instance of a service,
 // as returned by the service registry.
@@ -55,7 +54,6 @@ func (rc *RegistryClient) Lookup(name string) ([]ServiceEntry, error) {
 
 /////////////////////////////////////////////////////////
 // Round-Robin Load Balancer
-/////////////////////////////////////////////////////////
 
 // RoundRobin holds counters to track the next backend to use per service name.
 // It is safe for concurrent use by multiple goroutines.
@@ -90,7 +88,6 @@ func (rr *RoundRobin) Next(name string, backends []ServiceEntry) *ServiceEntry {
 
 /////////////////////////////////////////////////////////
 // HTTP Handler: /proxy/{serviceName}
-/////////////////////////////////////////////////////////
 
 // makeProxyHandler returns an HTTP handler that acts as a reverse proxy.
 // It looks up service instances and forwards the request to one of them.

@@ -130,19 +130,8 @@ func main() {
 	////////////////////////////////////////////////////////////
 	// Serve Static HTML Dashboard
 
-	////////////////////////////////////////////////////////////
-	// Serve dashboard HTML page at "/"
-	// This maps the root path "/" to the static HTMl file on disk:
 	// dashboard/static/dashboard.html
 	r.StaticFile("/", "./dashboard/static/dashboard.html")
-
-	//////////////////////////////////////////////////////////////
-	// Step 3: Add /api/services route
-	//
-	// This route groups running containers by their service prefix.
-	// Example: nginx-service-123456 -> nginx-service
-	// Each service lists its container IDs and statuses.
-	/////////////////////////////////////////////////////////////
 
 	// /api/services
 	r.GET("/api/services", func(c *gin.Context) {
@@ -181,14 +170,7 @@ func main() {
 
 		c.JSON(http.StatusOK, gin.H{"services": result})
 	})
-	////////////////////////////////////////////////////////////
-	// Add POST /api/scale/:name/:delta
-	//
-	// This endpoint receives a delta (e.g., +1 or -1) and adjusts
-	// The replica count for a given service by that delt.
-	// The container names
-	// are scanned to determine the current replica count
-	////////////////////////////////////////////////////////////
+
 	// /api/scale/:name/:delta
 	r.POST("/api/scale/:name/:delta", func(c *gin.Context) {
 		name := c.Param("name")
@@ -235,13 +217,7 @@ func main() {
 			"status":   "scaled successfully",
 		})
 	})
-	////////////////////////////////////////////////////////////
-	// Add POST /api/restart/:name
-	//
-	// This endpoint:
-	// 1. Stops all containers with names like /{name}-*
-	// 2. Then re-deploys the same number of replicas
-	////////////////////////////////////////////////////////////
+
 	// /api/restart/:name
 	r.POST("/api/restart/:name", func(c *gin.Context) {
 		name := c.Param("name")
@@ -284,6 +260,8 @@ func main() {
 	})
 
 	////////////////////////////////////////////////////////////
+	// The REST API
+
 	// POST /deploy
 	r.POST("/deploy", func(c *gin.Context) {
 		var req orchestrator.ServiceSpec
