@@ -46,7 +46,7 @@ func NewContainerManager() (*ContainerManager, error) {
 	}, nil
 }
 
-// StartContainer starts a container with the specified image name.
+// StartContainer starts a container with the specified image name
 func (m *ContainerManager) StartContainer(imageName, containerName string) (string, error) {
 	ctx := context.Background()
 
