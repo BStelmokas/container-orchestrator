@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,35 +69,32 @@ func (d *DeploymentController) reconcileAll() {
 // reconcileService checks the actual state for a single service
 // and starts or restarts containers as needed.
 func (d *DeploymentController) reconcileService(spec ServiceSpec) {
-	current := d.running[spec.Name]
-	healthy := []string{}
+	// Fetch all containers only once to avoid repeated Docker calls
+	containers, err := d.manager.ListContainers()
+	if err != nil {
+		log.Printf("[Deployere] Failed to list containers: %v", err)
+		return
+	}
 
-	// For each running container, check if it's still alive
-	for _, id := range current {
-		containers, err := d.manager.ListContainers()
-		if err != nil {
-			log.Printf("Failed to list containers: %v", err)
-			continue
-		}
+	// Track healthy containers for this service
+	var healthy []string
 
-		// Check if container ID still exists in the list
-		found := false
-		for _, c := range containers {
-			if c.ID == id {
-				found = true
-				break
-			}
-		}
-
-		if found {
-			healthy = append(healthy, id)
-		} else {
-			log.Printf("Container %s for service %q is dead", id[:12], spec.Name)
+	// Loop through all containers and collect those that match this service
+	for _, c := range containers {
+		// Docker container names start with "/" - check for name prefix
+		if len(c.Names) > 0 && strings.HasPrefix(c.Names[0], "/"+spec.Name) {
+			healthy = append(healthy, c.ID)
 		}
 	}
 
-	// If we need more containers, start them
+	// Calculate how many replicas are missing
 	missing := spec.Replicas - len(healthy)
+
+	if missing > 0 {
+		log.Printf("[Deployer] %d replicas missing for service %q", missing, spec.Name)
+	}
+
+	// If we need more containers, start them
 	for i := 0; i < missing; i++ {
 		containerName := spec.Name + "-" + randomSuffix() // ensure unique name
 		id, err := d.manager.StartContainer(spec.Image, containerName)
