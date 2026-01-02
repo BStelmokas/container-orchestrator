@@ -176,8 +176,8 @@ curl localhost:8080/status/nginx-service
 
 # Design Philosophy
 
--   Modular: Each subsystem(CLI, registry, deployer) is isolated.
--   Distributed Concepts: Mirros real-world microservice coordination.
+-   Modular: Each subsystem (CLI, registry, deployer) is isolated.
+-   Distributed Concepts: Mirrors real-world microservice coordination.
 -   Educational: Built from first principles with clear comments and logs.
 -   Resilient: Restarts dead containers, load balances HTTP traffic.
 
@@ -202,4 +202,4 @@ MIT License
 
 # Author
 
-Herodotus97
+Benas Stelmokas
