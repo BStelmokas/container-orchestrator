@@ -35,6 +35,7 @@ Project Layout: Modular Go structure
 
 # Project Structure
 
+```
 .
 ├── README.md
 ├── cmd
@@ -52,10 +53,10 @@ Project Layout: Modular Go structure
 │   ├── orchestrator
 │   │   └── main.go
 │   └── registry
-│   └── main.go
+│       └── main.go
 ├── dashboard
 │   └── static
-│   └── dashboard.html
+│       └── dashboard.html
 ├── go.mod
 ├── go.sum
 ├── internal
@@ -64,9 +65,10 @@ Project Layout: Modular Go structure
 │   ├── orchestrator
 │   │   └── deployer.go
 │   └── registry
-│   ├── client.go
-│   └── registry.go
+│       ├── client.go
+│       └── registry.go
 └── orchestrator
+```
 
 --
 
