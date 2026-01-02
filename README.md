@@ -1,6 +1,6 @@
 # Container Orchestration Platform
 
-A lightweight, modular container orchestration platform built from scratch - à la mini Kubernetes - tailored for learning and experimentation.
+A lightweight, modular container orchestration platform built from scratch - a mini Kubernetes - tailored for learning and experimentation.
 
 The platform supports container management, service discovery, load balancing health monitoring, scaling, and a REST API.
 
