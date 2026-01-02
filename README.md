@@ -6,8 +6,6 @@ A lightweight, modular container orchestration platform built from scratch - à 
 
 The platform supports container management, service discovery, load balancing health monitoring, scaling, and a REST API.
 
---
-
 # What It Does
 
 This system automatically runs and manages containerized services. It can:
@@ -20,8 +18,6 @@ This system automatically runs and manages containerized services. It can:
 -   Deploy and manage multiple replicas of services
 -   Interact via a REST API or CLI or web dashboard
 
---
-
 # Technologies Used
 
 ```
@@ -32,8 +28,6 @@ Web Server: [Gin](https://github.com/gin-gonic/gin)
 Networking: Native HTTP + Reverse Proxy
 Project Layout: Modular Go structure
 ```
-
---
 
 # Project Structure
 
@@ -71,8 +65,6 @@ Project Layout: Modular Go structure
 │       └── registry.go
 └── orchestrator
 ```
-
---
 
 # Features
 
@@ -132,8 +124,6 @@ conatinercli version
 -   `POST /api/scale/:name/:delta` - Adjusts replica counts
 -   `POST /api/restart/:name`- Redeploys containers of a service
 
---
-
 # Setup Instructions
 
 ## Prerequisites
@@ -146,7 +136,7 @@ conatinercli version
 
 Start the 3 main services in separate terminals:
 
-```
+```sh
 // Start the service registry
 go run cmd/registry/main.go
 
@@ -156,8 +146,6 @@ go run cmd/loadbalancer/main.go
 // Start the orchestrator
 go run cmd/orchestrator/main.go
 ```
-
---
 
 # API
 
@@ -172,8 +160,6 @@ curl -X POST localhost:8080/scale/nginx-service/5
 Check status:
 curl localhost:8080/status/nginx-service
 
---
-
 # Design Philosophy
 
 -   Modular: Each subsystem(CLI, registry, deployer) is isolated.
@@ -181,16 +167,12 @@ curl localhost:8080/status/nginx-service
 -   Educational: Built from first principles with clear comments and logs.
 -   Resilient: Restarts dead containers, load balances HTTP traffic.
 
---
-
 # Testing and Debugging
 
 -   Logs output to terminal (health checks, deploy actions, scaling)
 -   Health check interval: 30s
 -   Auto-scaler interval: 15s
 -   Dynamic container naming ensures unique deployments
-
---
 
 # Example Use Case
 
@@ -200,12 +182,8 @@ curl localhost:8080/status/nginx-service
 -   When CPU load increases, new containers are added
 -   When load drops, containers are removed
 
---
-
 © License
 MIT License
-
---
 
 # Author
 
