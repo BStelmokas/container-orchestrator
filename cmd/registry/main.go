@@ -81,7 +81,7 @@ func handleLookupAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For now, pretend we only support 1 instance per name
+	// For now, pretend this only supports 1 instance per name
 	entry, found := reg.Lookup(name)
 	if !found {
 		http.Error(w, "Service not found", http.StatusNotFound)
