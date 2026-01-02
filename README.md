@@ -121,6 +121,7 @@ conatinercli version
 -   `GET /api/services` - Lists all containers
 -   `POST /api/scale/:name/:delta` - Adjusts replica counts
 -   `POST /api/restart/:name`- Redeploys containers of a service
+-   `http://localhost:8080/`
 
 # Setup Instructions
 

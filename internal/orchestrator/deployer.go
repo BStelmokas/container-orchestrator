@@ -72,7 +72,7 @@ func (d *DeploymentController) reconcileService(spec ServiceSpec) {
 	// Fetch all containers only once to avoid repeated Docker calls
 	containers, err := d.manager.ListContainers()
 	if err != nil {
-		log.Printf("[Deployere] Failed to list containers: %v", err)
+		log.Printf("[Deployer] Failed to list containers: %v", err)
 		return
 	}
 
@@ -105,6 +105,23 @@ func (d *DeploymentController) reconcileService(spec ServiceSpec) {
 		log.Printf("Started container %s for service %q", id[:12], spec.Name)
 		healthy = append(healthy, id)
 	}
+
+	// If we need fewer containers, stop them
+	if missing < 0 {
+		log.Printf("[Deployer] %d replicas too many for service %q", -missing, spec.Name)
+
+		for i := 0; i < -missing; i++ {
+			containerId := healthy[len(healthy)-1]
+			err := d.manager.StopContainer(containerId)
+			if err != nil {
+				log.Printf("Failed to stop container for service %q: %v", spec.Name, err)
+				continue
+			}
+			log.Printf("Stopped container %s for service %q", containerId[:12], spec.Name)
+			healthy = healthy[:len(healthy)-1]
+		}
+	}
+
 
 	// Save updated healthy container list
 	d.running[spec.Name] = healthy

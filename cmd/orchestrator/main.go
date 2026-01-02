@@ -206,7 +206,7 @@ func main() {
 		// Re-deploy service with updated replica count
 		spec := orchestrator.ServiceSpec{
 			Name:     name,
-			Image:    "nginx:latest", // TODO: Extract from running containers or config
+			Image:    "nginx:latest",
 			Replicas: newReplicas,
 		}
 		controller.Deploy(spec)

@@ -9,7 +9,7 @@ import (
 
 // Client interacts with the service registry server.
 type Client struct {
-	BaseURL string // "http://localhost:8000"
+	BaseURL string // e.g. "http://localhost:8000"
 }
 
 // NewClient creates a registry client.
