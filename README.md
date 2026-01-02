@@ -1,7 +1,5 @@
 # Container Orchestration Platform
 
---
-
 A lightweight, modular container orchestration platform built from scratch - à la mini Kubernetes - tailored for learning and experimentation.
 
 The platform supports container management, service discovery, load balancing health monitoring, scaling, and a REST API.
@@ -136,14 +134,21 @@ conatinercli version
 
 Start the 3 main services in separate terminals:
 
+Start the service registry
+
 ```sh
-// Start the service registry
 go run cmd/registry/main.go
+```
 
-// Start the load balancer
+Start the load balancer
+
+```sh
 go run cmd/loadbalancer/main.go
+```
 
-// Start the orchestrator
+Start the orchestrator
+
+```sh
 go run cmd/orchestrator/main.go
 ```
 
