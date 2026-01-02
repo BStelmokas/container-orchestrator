@@ -163,7 +163,7 @@ Example scale:
 curl -X POST localhost:8080/scale/nginx-service/5
 ```
 
-// Check status:
+Check status:
 
 ```sh
 curl localhost:8080/status/nginx-service
