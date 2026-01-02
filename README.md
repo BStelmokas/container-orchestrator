@@ -150,15 +150,24 @@ go run cmd/orchestrator/main.go
 # API
 
 Example deployment:
+
+```sh
 curl -X POST localhost:8080/deploy \
  -H "Content-Type: application/json" \
  -d '{"name":"nginx-service", "image":"nginx:latest", "replicas":3}'
+```
 
 Example scale:
-curl -X POST localhost:8080/scale/nginx-service/5
 
-Check status:
+```sh
+curl -X POST localhost:8080/scale/nginx-service/5
+```
+
+// Check status:
+
+```sh
 curl localhost:8080/status/nginx-service
+```
 
 # Design Philosophy
 
