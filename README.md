@@ -146,6 +146,7 @@ conatinercli version
 
 Start the 3 main services in separate terminals:
 
+```
 // Start the service registry
 go run cmd/registry/main.go
 
@@ -154,6 +155,7 @@ go run cmd/loadbalancer/main.go
 
 // Start the orchestrator
 go run cmd/orchestrator/main.go
+```
 
 --
 
