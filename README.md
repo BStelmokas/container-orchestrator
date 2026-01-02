@@ -24,12 +24,14 @@ This system automatically runs and manages containerized services. It can:
 
 # Technologies Used
 
+```
 Core Language: [Go 1.24](https://go.dev/)
 Container Runtime: [Docker SDK v20.10](https://pkg.go.dev/github.com/docker/docker)
 CLI Tooling: [Cobra](https://github.com/spf13/cobra)
 Web Server: [Gin](https://github.com/gin-gonic/gin)
 Networking: Native HTTP + Reverse Proxy
 Project Layout: Modular Go structure
+```
 
 --
 
