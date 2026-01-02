@@ -182,7 +182,8 @@ curl localhost:8080/status/nginx-service
 -   When CPU load increases, new containers are added
 -   When load drops, containers are removed
 
-© License
+# License
+
 MIT License
 
 # Author
