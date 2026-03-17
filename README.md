@@ -2,7 +2,7 @@
 
 A lightweight, modular container orchestration platform built from scratch - a mini Kubernetes - tailored for learning and experimentation.
 
-The platform supports container management, service discovery, load balancing health monitoring, scaling, and a REST API.
+The platform supports container management, service discovery, load balancing, health monitoring, scaling, desired-state reconciliation, and a REST API.
 
 # What It Does
 
@@ -12,17 +12,17 @@ This system automatically runs and manages containerized services. It can:
 - Monitor container health and restart containers when needed
 - Register services for discovery and routing
 - Load balance HTTP traffic across healthy containers
-- Auto-scale services based on CPU usage
 - Deploy and manage multiple replicas of services
+- Store desired service state and reconcile actual runtime state toward it
 - Interact via a REST API or CLI or web dashboard
 
 # Technologies Used
 
-```
-Core Language: [Go 1.24](https://go.dev/)
-Container Runtime: [Docker SDK v20.10](https://pkg.go.dev/github.com/docker/docker)
-CLI Tooling: [Cobra](https://github.com/spf13/cobra)
-Web Server: [Gin](https://github.com/gin-gonic/gin)
+```text
+Core Language: Go 1.24
+Container Runtime: Docker SDK v20.10 / API v1.41 compatibility
+CLI Tooling: Cobra
+Web Server: Gin
 Networking: Native HTTP + Reverse Proxy
 Project Layout: Modular Go structure
 ```
@@ -54,13 +54,18 @@ Project Layout: Modular Go structure
 ├── go.mod
 ├── go.sum
 ├── internal
+│   ├── domain
+│   │   └── service.go
 │   ├── manager
 │   │   └── manager.go
 │   ├── orchestrator
 │   │   └── deployer.go
-│   └── registry
-│       ├── client.go
-│       └── registry.go
+│   ├── registry
+│   │   ├── client.go
+│   │   ├── registry.go
+│   │   └── types.go
+│   └── state
+│       └── store.go
 └── orchestrator
 ```
 
@@ -71,37 +76,45 @@ Project Layout: Modular Go structure
 - Start/stop containers via Docker
 - Auto health check via HTTP endpoints
 - Restarts unhealthy containers automatically
+- Removes stopped replicas during scale-down and replacement
 
 ### Service Discovery
 
 - Built-in in-memory registry
-- Containers register themselves with name, IP, port
-- Lookup API for service routing
+- Replicas register under a logical service name
+- Each replica is tracked as a distinct service instance
+- Lookup APIs support both single-instance and multi-instance resolution
 
 ### Load Balancer
 
 - Reverse proxy HTTP traffic
 - Distributes requests using round-robin across healthy services
+- Resolves all backends for a logical service through the registry
 
 ### Deployment Controller
 
 - Ensures `N` replicas are running for a service
-- Replaces dead containers
+- Reconciles desired state against actual running containers
+- Replaces missing replicas
 - Generates unique names per replica
 
-### Auto-Scaler
+### Desired State Store
 
-- Monitors CPU usage of containers
-- Scales up when CPU > 80%
-- Scales down when CPU < 20%
-- Integrated into deployment controller
+- Stores service definitions as first-class objects
+- Keeps service name, image, and desired replica count together
+- Acts as the source of truth for deploy, scale, restart, and delete operations
 
 ### REST API
 
-- `POST /deploy` - Deploy a service
-- `POST /scale/:name/:replicas` - Manually scale a service
-- `GET /status/:name` - Check container status
+- `POST /deploy` - Deploy a service (legacy-compatible endpoint)
+- `POST /scale/:name/:replicas` - Manually scale a service (legacy-compatible endpoint)
+- `GET /status/:name` - Check service status
 - `GET /logs/:name` - View logs of service containers
+- `GET /api/services` - List desired services with running container data
+- `POST /api/services` - Create or update a service
+- `POST /api/scale/:name/:delta` - Adjust replica counts
+- `POST /api/restart/:name` - Restart all running replicas of a service
+- `DELETE /api/services/:name` - Delete a service and remove its running replicas
 
 ### CLI
 
@@ -151,9 +164,10 @@ containercli start --image nginx --name my-nginx
 
 ### Web Dashboard
 
-- `GET /api/services` - Lists all containers
+- `GET /api/services` - Lists services, images, desired replicas, and running replicas
 - `POST /api/scale/:name/:delta` - Adjusts replica counts
 - `POST /api/restart/:name`- Redeploys containers of a service
+- `DELETE /api/services/:name`- Deletes a service
 - `http://localhost:8080/`
 
 # Setup Instructions
@@ -196,10 +210,24 @@ curl -X POST localhost:8080/deploy \
  -d '{"name":"nginx-service", "image":"nginx:latest", "replicas":3}'
 ```
 
+Example service creation through the newer API:
+
+```sh
+curl -X POST localhost:8080/api/services \
+ -H "Content-Type: application/json" \
+ -d '{"name":"nginx-service","image":"nginx:latest","replicas":3}'
+```
+
 Example scale:
 
 ```sh
 curl -X POST localhost:8080/scale/nginx-service/5
+```
+
+Example dashboard-style scale adjustment:
+
+```sh
+curl -X POST localhost:8080/api/scale/nginx-service/1
 ```
 
 Check status:
@@ -208,27 +236,35 @@ Check status:
 curl localhost:8080/status/nginx-service
 ```
 
+Delete a service:
+
+```sh
+curl -X DELETE localhost:8080/api/services/nginx-service
+```
+
 # Design Philosophy
 
-- Modular: Each subsystem (CLI, registry, deployer) is isolated.
+- Modular: Each subsystem (CLI, registry, desired-state store, deployer) is isolated.
+- Control Plane Oriented: Services are stored as desired state and reconciled toward runtime state.
 - Distributed Concepts: Mirrors real-world microservice coordination.
-- Educational: Built from first principles with clear comments and logs.
-- Resilient: Restarts dead containers, load balances HTTP traffic.
+- Professional: Built from first principles with clear comments and logs.
+- Resilient: Restarts dead containers and load balances HTTP traffic across replicas.
 
 # Testing and Debugging
 
 - Logs output to terminal (health checks, deploy actions, scaling)
 - Health check interval: 30s
-- Auto-scaler interval: 15s
-- Dynamic container naming ensures unique deployments
+- Registry stores multiple instances per logical service
+- Dynamic replica naming ensures unique deployments
 
 # Example Use Case
 
 - Start nginx service with 3 replicas
-- Health checks ensure they stay alive
-- Load balancer routes requests to any of the 3
-- When CPU load increases, new containers are added
-- When load drops, containers are removed
+- Desired state is stored in the service store
+- The deployment controller ensures 3 running replicas exist
+- Health checks restart unhealthy containers
+- The registry tracks all replicas under one logical service
+- The load balancer routes requests to any of the 3 replicas
 
 # License
 
