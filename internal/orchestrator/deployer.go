@@ -94,7 +94,7 @@ func (d *DeploymentController) reconcileService(spec ServiceSpec) {
 		log.Printf("[Deployer] %d replicas missing for service %q", missing, spec.Name)
 	}
 
-	// If we need more containers, start them
+	// When needing more containers, start them
 	for i := 0; i < missing; i++ {
 		containerName := spec.Name + "-" + randomSuffix() // ensure unique name
 		id, err := d.manager.StartContainer(spec.Image, containerName)
@@ -106,7 +106,7 @@ func (d *DeploymentController) reconcileService(spec ServiceSpec) {
 		healthy = append(healthy, id)
 	}
 
-	// If we need fewer containers, stop them
+	// When needing fewer containers, stop them
 	if missing < 0 {
 		log.Printf("[Deployer] %d replicas too many for service %q", -missing, spec.Name)
 

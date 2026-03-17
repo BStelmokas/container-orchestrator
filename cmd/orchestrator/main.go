@@ -76,7 +76,7 @@ func main() {
 				continue
 			}
 
-			// Filter containers that match our deployed service name
+			// Filter containers that match the deployed service name
 			var matching []types.Container
 			for _, c := range containers {
 				// Docker container names usually start with "/" - e.g. "/nginx-service-1"
