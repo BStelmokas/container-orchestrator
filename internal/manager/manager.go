@@ -47,7 +47,7 @@ func NewContainerManager() (*ContainerManager, error) {
 }
 
 // StartContainer starts a container with the specified image name
-func (m *ContainerManager) StartContainer(imageName, containerName string) (string, error) {
+func (m *ContainerManager) StartContainer(serviceName, imageName, containerName string) (string, error) {
 	ctx := context.Background()
 
 	// Pull image from Docker Hub if not available
@@ -56,6 +56,7 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 		return "", fmt.Errorf("failed to pull image: %w", err)
 	}
 	defer reader.Close()
+
 	io.Copy(io.Discard, reader) // drain the response body to complete the pull
 
 	// Remove any existing container with the same name if exists
@@ -67,6 +68,7 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 	exposedPorts := nat.PortSet{
 		"80/tcp": struct{}{},
 	}
+
 	// Use dynamic host port: let Docker bind an available port
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{
@@ -137,14 +139,14 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 	healthURL := fmt.Sprintf("http://%s:%d", ip, port)
 
 	// Register using host-assigned port
-	if err := m.registry.Register(containerName, ip, port); err != nil {
-		log.Printf("[Registry] Failed to register service %q: %v", containerName, err)
+	if err := m.registry.Register(containerName, resp.ID, ip, port); err != nil {
+		log.Printf("[Registry] Failed to register service %q instance %s: %v", serviceName, resp.ID[:12], err)
 	} else {
-		log.Printf("[Registry] Registered service %q at %s:%d", containerName, ip, port)
+		log.Printf("[Registry] Registered service %q instance %s at %s:%d", serviceName, resp.ID[:12], ip, port)
 	}
 
 	// To health-check each container
-	m.StartHealthMonitor(resp.ID, containerName, imageName, healthURL)
+	m.StartHealthMonitor(resp.ID, serviceName, containerName, imageName, healthURL)
 
 	return resp.ID, nil
 }
@@ -173,14 +175,23 @@ func (m *ContainerManager) GetContainerName(containerID string) (string, error) 
 func (m *ContainerManager) StopContainer(containerID string) error {
 	ctx := context.Background()
 
-	// Resolve container name from its ID
-	name, nameErr := m.GetContainerName(containerID)
-	if nameErr != nil {
-		log.Printf("[Registry] Could not resolve name for container ID %s before stop: %v", containerID[:12], nameErr)
+	// Resolve full container metadata so deregistration can target the exact service + instance.
+	inspection, inspectErr := m.cli.ContainerInspect(ctx, containerID)
+	if inspectErr != nil {
+		log.Printf("[Registry] Could not inspect container %s before stop: %v", containerID[:12], inspectErr)
 	}
+
+	containerName := ""
+	if inspectErr == nil {
+		containerName = strings.TrimPrefix(inspection.Name, "/")
+	}
+
+	// Derive the logical service name from the managed naming convention.
+	serviceName := managedServiceNameFromContainerName(containerName)
 
 	timeout := 10 // Timeout in seconds before force-killing the container
 	timeoutDuration := time.Duration(timeout) * time.Second
+
 	// Using an older version of ContainerStop to be compatible with Docker API v1.41
 	// In Docker SDK <= v20.10.x, ContainerStop uses a *duration instead of StopOptions
 	err := m.cli.ContainerStop(ctx, containerID, &timeoutDuration)
@@ -193,11 +204,11 @@ func (m *ContainerManager) StopContainer(containerID string) error {
 	}
 
 	// Deregister before removal when having a resolved name
-	if nameErr == nil {
-		if err := m.registry.Deregister(name); err != nil {
-			log.Printf("[Registry] Failed to deregister service: %q: %v", name, err)
+	if inspectErr == nil && serviceName != "" {
+		if err := m.registry.Deregister(serviceName, inspection.ID); err != nil {
+			log.Printf("[Registry] Failed to deregister service %q instance %s: %v", serviceName, inspection.ID[:12], err)
 		} else {
-			log.Printf("[Registry] Deregistered service %q", name)
+			log.Printf("[Registry] Deregistered service %q instance %s", serviceName, inspection.ID[:12])
 		}
 	}
 
@@ -237,7 +248,7 @@ func (m *ContainerManager) ListRunningContainers() ([]types.Container, error) {
 
 // StartHealthMonitor starts a background goroutine that checks the health of a container's HTTP endpoint
 // every 30 seconds. If the check fails, the container is restarted.
-func (m *ContainerManager) StartHealthMonitor(containerID, containerName, imageName, healthURL string) {
+func (m *ContainerManager) StartHealthMonitor(containerID, serviceName, containerName, imageName, healthURL string) {
 	go func() {
 		for {
 			time.Sleep(30 * time.Second)
@@ -271,7 +282,7 @@ func (m *ContainerManager) StartHealthMonitor(containerID, containerName, imageN
 					log.Printf("[HealthCheck] Failed to stop container: %v", stopErr)
 				}
 
-				newID, startErr := m.StartContainer(imageName, containerName)
+				newID, startErr := m.StartContainer(serviceName, imageName, containerName)
 				if startErr != nil {
 					log.Printf("[HealthCheck] Failed to restart container: %v", startErr)
 				} else {
@@ -321,4 +332,20 @@ func (m *ContainerManager) FetchLogs(containerID string) (string, error) {
 
 	// Combine both stdout and stderr cleanly
 	return out.String() + errOut.String(), nil
+}
+
+/*
+managedServiceNameFromContainerName extracts the logical service name from the managed naming convention "<service-name>-<random-suffix>".
+*/
+func managedServiceNameFromContainerName(containerName string) string {
+	if containerName == "" {
+		return ""
+	}
+
+	idx := strings.LastIndex(containerName, "-")
+	if idx == -1 {
+		return containerName
+	}
+
+	return containerName[:idx]
 }

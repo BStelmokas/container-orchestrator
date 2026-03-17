@@ -87,7 +87,7 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 	// When needing more containers, start them
 	for i := 0; i < missing; i++ {
 		containerName := spec.Name + "-" + randomSuffix() // ensure unique name
-		id, err := d.manager.StartContainer(spec.Image, containerName)
+		id, err := d.manager.StartContainer(spec.Name, spec.Image, containerName)
 		if err != nil {
 			log.Printf("Failed to start container for service %q: %v", spec.Name, err)
 			continue
