@@ -139,7 +139,7 @@ func (m *ContainerManager) StartContainer(serviceName, imageName, containerName 
 	healthURL := fmt.Sprintf("http://%s:%d", ip, port)
 
 	// Register using host-assigned port
-	if err := m.registry.Register(containerName, resp.ID, ip, port); err != nil {
+	if err := m.registry.Register(serviceName, resp.ID, ip, port); err != nil {
 		log.Printf("[Registry] Failed to register service %q instance %s: %v", serviceName, resp.ID[:12], err)
 	} else {
 		log.Printf("[Registry] Registered service %q instance %s at %s:%d", serviceName, resp.ID[:12], ip, port)
