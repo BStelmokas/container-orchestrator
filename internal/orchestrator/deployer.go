@@ -1,6 +1,8 @@
 package orchestrator
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"strings"
 	"sync"
@@ -46,6 +48,29 @@ func (d *DeploymentController) Deploy(spec ServiceSpec) {
 	d.specs[spec.Name] = spec
 }
 
+// GetSpec returns service specs
+func (d *DeploymentController) GetSpec(name string) (ServiceSpec, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	spec, found := d.specs[name]
+	return spec, found
+}
+
+// ListSpecs exists for the enumeration of services
+func (d *DeploymentController) ListSpecs() []ServiceSpec {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	result := make([]ServiceSpec, 0, len(d.specs))
+	for _, spec := range d.specs {
+		result = append(result, spec)
+	}
+
+	return result
+}
+
+
 // Start begins the reconciliation loop as a background routine
 func (d *DeploymentController) Start() {
 	go func() {
@@ -70,9 +95,9 @@ func (d *DeploymentController) reconcileAll() {
 // and starts or restarts containers as needed.
 func (d *DeploymentController) reconcileService(spec ServiceSpec) {
 	// Fetch all containers only once to avoid repeated Docker calls
-	containers, err := d.manager.ListContainers()
+	containers, err := d.manager.ListRunningContainers()
 	if err != nil {
-		log.Printf("[Deployer] Failed to list containers: %v", err)
+		log.Printf("[Deployer] Failed to list running containers: %v", err)
 		return
 	}
 
@@ -82,7 +107,7 @@ func (d *DeploymentController) reconcileService(spec ServiceSpec) {
 	// Loop through all containers and collect those that match this service
 	for _, c := range containers {
 		// Docker container names start with "/" - check for name prefix
-		if len(c.Names) > 0 && strings.HasPrefix(c.Names[0], "/"+spec.Name) {
+		if len(c.Names) > 0 && matchesServiceContainerName(c.Names[0], spec.Name) {
 			healthy = append(healthy, c.ID)
 		}
 	}
@@ -127,7 +152,20 @@ func (d *DeploymentController) reconcileService(spec ServiceSpec) {
 	d.running[spec.Name] = healthy
 }
 
+// matchesServiceContainerName is a helper for explicit service matching.
+func matchesServiceContainerName(containerDockerName, serviceName string) bool {
+	trimmed := strings.TrimPrefix(containerDockerName, "/")
+	return trimmed == serviceName || strings.HasPrefix(trimmed, serviceName+"-")
+}
+
+
 // randomSuffix generates a short random string to differentiate container names
 func randomSuffix() string {
-	return time.Now().Format("150405") // e.g. "153201" or 15:32:01
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to keep uniqueness
+		return time.Now().Format("150405.000000000")
+	}
+
+	return hex.EncodeToString(b)
 }
