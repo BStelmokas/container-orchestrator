@@ -8,70 +8,36 @@ import (
 	"sync"
 	"time"
 
+	"orchestrator/internal/domain"
 	"orchestrator/internal/manager"
+	"orchestrator/internal/state"
 )
 
-// ServiceSpec defines a desired deployment state for a service.
-// It includes a name, the Docker image to use, and how many replicas should be running.
-type ServiceSpec struct {
-	Name     string // logical service name (e.g., "auth-service")
-	Image    string // Docker image (e.g., "nginx:latest")
-	Replicas int    // number of desired container instances
-}
-
-// DeploymentController is responsible for ensuring that a given service
-// always has the desired number of containers running.
+// DeploymentController is responsible for reconciling desired service state with actual running containers.
 type DeploymentController struct {
 	manager     *manager.ContainerManager // handles container operations
-	specs       map[string]ServiceSpec    // desired service specs by name
+	store      *state.ServiceStore   			// desired state source of truth
 	running     map[string][]string       // containerIDs currently running per service
 	mu          sync.Mutex                // protects access to specs and running maps
 	checkPeriod time.Duration             // how often to reconcile state
 }
 
 // NewDeploymentController creates a new deployment controller instance
-func NewDeploymentController(m *manager.ContainerManager, checkPeriod time.Duration) *DeploymentController {
+func NewDeploymentController(m *manager.ContainerManager, store *state.ServiceStore, checkPeriod time.Duration) *DeploymentController {
 	return &DeploymentController{
 		manager:     m,
-		specs:       make(map[string]ServiceSpec),
+		store:       store,
 		running:     make(map[string][]string),
 		checkPeriod: checkPeriod,
 	}
 }
 
-// Deploy registers a desired spec and triggers reconciliation
-func (d *DeploymentController) Deploy(spec ServiceSpec) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	log.Printf("Deploying service %q with image=%q, replicas=%d", spec.Name, spec.Image, spec.Replicas)
-	d.specs[spec.Name] = spec
+// ReconcileNow gives API handlers a way to trigger immediate convergence after changing desired state.
+func (d *DeploymentController) ReconcileNow() {
+	d.reconcileAll()
 }
 
-// GetSpec returns service specs
-func (d *DeploymentController) GetSpec(name string) (ServiceSpec, bool) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	spec, found := d.specs[name]
-	return spec, found
-}
-
-// ListSpecs exists for the enumeration of services
-func (d *DeploymentController) ListSpecs() []ServiceSpec {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	result := make([]ServiceSpec, 0, len(d.specs))
-	for _, spec := range d.specs {
-		result = append(result, spec)
-	}
-
-	return result
-}
-
-
-// Start begins the reconciliation loop as a background routine
+// Start begins the reconciliation loop as a background routine.
 func (d *DeploymentController) Start() {
 	go func() {
 		for {
@@ -81,19 +47,18 @@ func (d *DeploymentController) Start() {
 	}()
 }
 
-// reconcileAll loops through all registered services and ensures desired state
+// reconcileAll loops through all registered services and ensures desired state.
 func (d *DeploymentController) reconcileAll() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	specs := d.store.List()
 
-	for _, spec := range d.specs {
+	for _, spec := range specs {
 		d.reconcileService(spec)
 	}
 }
 
 // reconcileService checks the actual state for a single service
 // and starts or restarts containers as needed.
-func (d *DeploymentController) reconcileService(spec ServiceSpec) {
+func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 	// Fetch all containers only once to avoid repeated Docker calls
 	containers, err := d.manager.ListRunningContainers()
 	if err != nil {
@@ -147,9 +112,10 @@ func (d *DeploymentController) reconcileService(spec ServiceSpec) {
 		}
 	}
 
-
+	d.mu.Lock()
 	// Save updated healthy container list
 	d.running[spec.Name] = healthy
+	d.mu.Unlock()
 }
 
 // matchesServiceContainerName is a helper for explicit service matching.
@@ -157,7 +123,6 @@ func matchesServiceContainerName(containerDockerName, serviceName string) bool {
 	trimmed := strings.TrimPrefix(containerDockerName, "/")
 	return trimmed == serviceName || strings.HasPrefix(trimmed, serviceName+"-")
 }
-
 
 // randomSuffix generates a short random string to differentiate container names
 func randomSuffix() string {
