@@ -46,16 +46,28 @@
           div.className = "service-card";
 
           let html = `<h2>${service.name}</h2>`;
+
+          // Show desired-state metadata from the store-backed API.
+          html += `
+            <div class="service-meta">
+              <div><strong>Image:</strong> ${service.image}</div>
+              <div><strong>Desired Replicas:</strong> ${service.desiredReplicas}</div>
+              <div><strong>Running Replicas:</strong> ${service.runningReplicas}</div>
+            </div>
+          `;
+
           html += "<div>";
+
           for (const c of service.containers) {
             html += `<div class="container">${c}</div>`;
           }
-          html += `</div>`;
 
+          html += `</div>`;
           html += `
                         <button onclick="scale('${service.name}', 1)">Scale Up</button>
                         <button onclick="scale('${service.name}', -1)">Scale Down</button>
                         <button onclick="restart('${service.name}')">Restart</button>
+                        <button onclick="deleteService('${service.name}')">Delete</button>
                     `;
 
           div.innerHTML = html;
@@ -74,6 +86,14 @@
       // POST to /api/restart/:name
       async function restart(name) {
         await fetch("/api/restart/" + name, { method: "POST" });
+        loadServices();
+      }
+
+      async function deleteService(name) {
+        await fetch("/api/services/" + name, {
+          method: "DELETE",
+        });
+
         loadServices();
       }
 

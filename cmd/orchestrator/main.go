@@ -7,9 +7,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"orchestrator/internal/domain"
 	"orchestrator/internal/manager"
 	"orchestrator/internal/orchestrator"
+	"orchestrator/internal/state"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,8 +24,11 @@ func main() {
 		log.Fatalf("Error creating container manager: %v", err)
 	}
 
+	// Create a dedicated desired-state store.
+	serviceStore := state.NewServiceStore()
+
 	// Initialize and start deployment controller (manages desired replica state).
-	controller := orchestrator.NewDeploymentController(manager, 10)
+	controller := orchestrator.NewDeploymentController(manager, serviceStore, 10*time.Second)
 	controller.Start()
 
 	r := gin.Default()
@@ -38,11 +44,18 @@ func main() {
 			return
 		}
 
-		specs := controller.ListSpecs()
+		specs := serviceStore.List()
 
 		// Group containers.
 		serviceMap := make(map[string][]string)
+		serviceImages := make(map[string]string)
+		desiredCounts := make(map[string]int)
+		runningCounts := make(map[string]int)
+
 		for _, spec := range specs {
+			serviceImages[spec.Name] = spec.Image
+			desiredCounts[spec.Name] = spec.Replicas
+
 			for _, cont := range containers {
 				if len(cont.Names) == 0 {
 					continue
@@ -51,13 +64,14 @@ func main() {
 				if matchesServiceName(cont.Names[0], spec.Name) {
 					label := fmt.Sprintf("%s (%s)", cont.ID[:12], cont.Status)
 					serviceMap[spec.Name] = append(serviceMap[spec.Name], label)
+					runningCounts[spec.Name]++
 				}
 			}
 		}
 
 		// Return services in sorted order for a stable UI experience.
-		names := make([]string, 0, len(serviceMap))
-		for name := range serviceMap {
+		names := make([]string, 0, len(desiredCounts))
+		for name := range desiredCounts {
 			names = append(names, name)
 		}
 		sort.Strings(names)
@@ -66,6 +80,9 @@ func main() {
 		for _, name := range names {
 			result = append(result, gin.H{
 				"name": name,
+				"image": serviceImages[name],
+				"desiredReplicas": desiredCounts[name],
+				"runningReplicas": runningCounts[name],
 				"containers": serviceMap[name],
 			})
 		}
@@ -73,6 +90,26 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"services": result})
 	})
 
+	// Service-centric create/update endpoint.
+	r.POST("/api/services", func(c *gin.Context) {
+		var req domain.ServiceSpec
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+			return
+		}
+
+		if err := serviceStore.Upsert(req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		controller.ReconcileNow() // Trigger immediate convergence after desired-state mutation
+
+		c.JSON(http.StatusOK, gin.H{
+			"status": "service stored",
+			"service": req.Name,
+		})
+	})
 
 	// /api/scale/:name/:delta
 	r.POST("/api/scale/:name/:delta", func(c *gin.Context) {
@@ -86,7 +123,7 @@ func main() {
 			return
 		}
 
-		spec, found := controller.GetSpec(name)
+		spec, found := serviceStore.Get(name)
 		if !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
 			return
@@ -98,13 +135,21 @@ func main() {
 			newReplicas = 1 // Always keep at least one replica running
 		}
 
-		// Re-deploy service with updated replica count
-		spec.Replicas = newReplicas
-		controller.Deploy(spec)
+		updatedSpec, found, err := serviceStore.Scale(name, newReplicas)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if !found {
+			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
+			return
+		}
+
+		controller.ReconcileNow()
 
 		c.JSON(http.StatusOK, gin.H{
 			"service":  name,
-			"replicas": newReplicas,
+			"replicas": updatedSpec.Replicas,
 			"status":   "scaled successfully",
 		})
 	})
@@ -114,8 +159,7 @@ func main() {
 		name := c.Param("name")
 
 		// Get list of all containers
-		spec, found := controller.GetSpec(name)
-		if !found {
+		if _, found := serviceStore.Get(name); !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
 			return
 		}
@@ -147,15 +191,50 @@ func main() {
 			return
 		}
 
-		// Re-deploy the service with the same number of replicas
-		controller.Deploy(spec)
+		controller.ReconcileNow()
 
 		c.JSON(http.StatusOK, gin.H{
 			"service":  name,
-			"replicas": spec.Replicas,
 			"status":   "restart triggered",
 		})
 	})
+
+	//Service delete endpoint that removes desired state and stops live replicas.
+	r.DELETE("/api/services/:name", func(c *gin.Context) {
+		name := c.Param("name")
+
+		if deleted := serviceStore.Delete(name); !deleted {
+			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service " + name})
+			return
+		}
+
+		containers, err := manager.ListRunningContainers()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list running containers"})
+			return
+		}
+
+		for _, cont := range containers {
+			if len(cont.Names) == 0 {
+				continue
+			}
+
+			if matchesServiceName(cont.Names[0], name) {
+				log.Printf("[Delete] Stopping container: %s", cont.ID[:12])
+				if err := manager.StopContainer(cont.ID); err != nil {
+					log.Printf("[Delete] Failed stopping container %s: %v", cont.ID[:12], err)
+				}
+			}
+		}
+
+		controller.ReconcileNow() // Ensure control plane converges immediately after delete.
+
+		c.JSON(http.StatusOK, gin.H{
+			"service": name,
+			"status": "deleted",
+		})
+	})
+
 
   /*
 	The REST API
@@ -163,13 +242,20 @@ func main() {
 
 	// POST /deploy
 	r.POST("/deploy", func(c *gin.Context) {
-		var req orchestrator.ServiceSpec
+		var req domain.ServiceSpec
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
 			return
 		}
-		controller.Deploy(req)
-		c.JSON(http.StatusOK, gin.H{"status": "deployment started", "service": req.Name})
+
+		if err := serviceStore.Upsert(req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		controller.ReconcileNow()
+
+		c.JSON(http.StatusOK, gin.H{"status": "deployment stored", "service": req.Name})
 	})
 
 	// POST /scale/:name/:replicas
@@ -183,21 +269,33 @@ func main() {
 			return
 		}
 
-		spec, found := controller.GetSpec(name)
+		updatedSpec, found, err := serviceStore.Scale(name, n)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		if !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
 			return
 		}
 
-		spec.Replicas = n
-		controller.Deploy(spec)
+		controller.ReconcileNow()
 
-		c.JSON(http.StatusOK, gin.H{"status": "scaled", "replicas": n})
+		c.JSON(http.StatusOK, gin.H{
+			"status": "scaled",
+			"replicas": updatedSpec.Replicas,
+		})
 	})
 
 	// GET /status/:name
 	r.GET("/status/:name", func(c *gin.Context) {
 		name := c.Param("name")
+
+		spec, found := serviceStore.Get(name)
+		if !found {
+			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
+			return
+		}
 
 		containers, err := manager.ListRunningContainers()
 		if err != nil {
@@ -216,12 +314,23 @@ func main() {
 			}
 		}
 
-		c.JSON(http.StatusOK, gin.H{"containers": result})
+		c.JSON(http.StatusOK, gin.H{
+			"name": spec.Name,
+			"image": spec.Image,
+			"desiredReplicas": spec.Replicas,
+			"runningReplicas": len(result),
+			"containers": result,
+		})
 	})
 
 	// GET /logs/:name
 	r.GET("/logs/:name", func(c *gin.Context) {
 		name := c.Param("name")
+
+		if _, found := serviceStore.Get(name); !found {
+			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
+			return
+		}
 
 		containers, err := manager.ListRunningContainers()
 		if err != nil {
