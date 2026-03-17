@@ -8,13 +8,13 @@ The platform supports container management, service discovery, load balancing he
 
 This system automatically runs and manages containerized services. It can:
 
--   Start and stop Docker containers
--   Monitor container health and restart containers when needed
--   Register services for discovery and routing
--   Load balance HTTP traffic across healthy containers
--   Auto-scale services based on CPU usage
--   Deploy and manage multiple replicas of services
--   Interact via a REST API or CLI or web dashboard
+- Start and stop Docker containers
+- Monitor container health and restart containers when needed
+- Register services for discovery and routing
+- Load balance HTTP traffic across healthy containers
+- Auto-scale services based on CPU usage
+- Deploy and manage multiple replicas of services
+- Interact via a REST API or CLI or web dashboard
 
 # Technologies Used
 
@@ -68,68 +68,101 @@ Project Layout: Modular Go structure
 
 ### Container Manager
 
--   Start/stop containers via Docker
--   Auto health check via HTTP endpoints
--   Restarts unhealthy containers automatically
+- Start/stop containers via Docker
+- Auto health check via HTTP endpoints
+- Restarts unhealthy containers automatically
 
 ### Service Discovery
 
--   Built-in in-memory registry
--   Containers register themselves with name, IP, port
--   Lookup API for service routing
+- Built-in in-memory registry
+- Containers register themselves with name, IP, port
+- Lookup API for service routing
 
 ### Load Balancer
 
--   Reverse proxy HTTP traffic
--   Distributes requests using round-robin across healthy services
+- Reverse proxy HTTP traffic
+- Distributes requests using round-robin across healthy services
 
 ### Deployment Controller
 
--   Ensures `N` replicas are running for a service
--   Replaces dead containers
--   Generates unique names per replica
+- Ensures `N` replicas are running for a service
+- Replaces dead containers
+- Generates unique names per replica
 
 ### Auto-Scaler
 
--   Monitors CPU usage of containers
--   Scales up when CPU > 80%
--   Scales down when CPU < 20%
--   Integrated into deployment controller
+- Monitors CPU usage of containers
+- Scales up when CPU > 80%
+- Scales down when CPU < 20%
+- Integrated into deployment controller
 
 ### REST API
 
--   `POST /deploy` - Deploy a service
--   `POST /scale/:name/:replicas` - Manually scale a service
--   `GET /status/:name` - Check container status
--   `GET /logs/:name` - View logs of service containers
+- `POST /deploy` - Deploy a service
+- `POST /scale/:name/:replicas` - Manually scale a service
+- `GET /status/:name` - Check container status
+- `GET /logs/:name` - View logs of service containers
 
 ### CLI
 
-Command-line tool using Cobra:
+Command-line tool built with Cobra.
+
+#### Run without installing (recommended for development)
+
+```sh
+go run ./cmd/cli start --image nginx --name my-nginx
+go run ./cmd/cli stop my-nginx
+go run ./cmd/cli list
+go run ./cmd/cli status my-nginx
+go run ./cmd/cli version
+```
+
+#### Build locally
+
+Build the CLI binary:
+
+```sh
+go build -o containercli ./cmd/cli
+```
+
+Run the binary:
+
+```sh
+./containercli start --image nginx --name my-nginx
+./containercli stop my-nginx
+./containercli list
+./containercli status my-nginx
+./containercli version
+```
+
+#### Install globally (optional)
+
+Install the binary into your system PATH:
+
+```sh
+go build -o /usr/local/bin/containercli ./cmd/cli
+```
+
+Run the binary:
 
 ```sh
 containercli start --image nginx --name my-nginx
-containercli stop my-nginx
-containercli list
-conatainercli status my-nginx
-conatinercli version
-
 ```
 
 ### Web Dashboard
 
--   `GET /api/services` - Lists all containers
--   `POST /api/scale/:name/:delta` - Adjusts replica counts
--   `POST /api/restart/:name`- Redeploys containers of a service
--   `http://localhost:8080/`
+- `GET /api/services` - Lists all containers
+- `POST /api/scale/:name/:delta` - Adjusts replica counts
+- `POST /api/restart/:name`- Redeploys containers of a service
+- `http://localhost:8080/`
 
 # Setup Instructions
 
 ## Prerequisites
 
--   Docker daemon running
--   Go 1.24+
--   Ports 8000, 8080, and 9000 must be free
+- Docker daemon running
+- Go 1.24+
+- Ports 8000, 8080, and 9000 must be free
 
 ## Build & Run
 
@@ -177,25 +210,25 @@ curl localhost:8080/status/nginx-service
 
 # Design Philosophy
 
--   Modular: Each subsystem (CLI, registry, deployer) is isolated.
--   Distributed Concepts: Mirrors real-world microservice coordination.
--   Educational: Built from first principles with clear comments and logs.
--   Resilient: Restarts dead containers, load balances HTTP traffic.
+- Modular: Each subsystem (CLI, registry, deployer) is isolated.
+- Distributed Concepts: Mirrors real-world microservice coordination.
+- Educational: Built from first principles with clear comments and logs.
+- Resilient: Restarts dead containers, load balances HTTP traffic.
 
 # Testing and Debugging
 
--   Logs output to terminal (health checks, deploy actions, scaling)
--   Health check interval: 30s
--   Auto-scaler interval: 15s
--   Dynamic container naming ensures unique deployments
+- Logs output to terminal (health checks, deploy actions, scaling)
+- Health check interval: 30s
+- Auto-scaler interval: 15s
+- Dynamic container naming ensures unique deployments
 
 # Example Use Case
 
--   Start nginx service with 3 replicas
--   Health checks ensure they stay alive
--   Load balancer routes requests to any of the 3
--   When CPU load increases, new containers are added
--   When load drops, containers are removed
+- Start nginx service with 3 replicas
+- Health checks ensure they stay alive
+- Load balancer routes requests to any of the 3
+- When CPU load increases, new containers are added
+- When load drops, containers are removed
 
 # License
 
