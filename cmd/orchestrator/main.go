@@ -186,6 +186,7 @@ func main() {
 		spec, found := controller.GetSpec(name)
 		if !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
+			return
 		}
 
 		spec.Replicas = n
