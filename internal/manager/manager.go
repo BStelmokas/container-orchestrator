@@ -93,8 +93,9 @@ func (m *ContainerManager) StartContainer(imageName, containerName string) (stri
 		return "", fmt.Errorf("failed to start container %w", err)
 	}
 
-	///////////////////////////////////////////////////////////////////////
-	// Inspect container to extract the actual host-mapped port
+	/*
+	Inspect container to extract the actual host-mapped port
+	*/
 
 	// Retry ContainerInspect to give Docker time to assign ports
 	var inspection types.ContainerJSON
@@ -172,27 +173,39 @@ func (m *ContainerManager) GetContainerName(containerID string) (string, error) 
 func (m *ContainerManager) StopContainer(containerID string) error {
 	ctx := context.Background()
 
+	// Resolve container name from its ID
+	name, nameErr := m.GetContainerName(containerID)
+	if nameErr != nil {
+		log.Printf("[Registry] Could not resolve name for container ID %s before stop: %v", containerID[:12], nameErr)
+	}
+
 	timeout := 10 // Timeout in seconds before force-killing the container
 	timeoutDuration := time.Duration(timeout) * time.Second
 	// Using an older version of ContainerStop to be compatible with Docker API v1.41
 	// In Docker SDK <= v20.10.x, ContainerStop uses a *duration instead of StopOptions
 	err := m.cli.ContainerStop(ctx, containerID, &timeoutDuration)
 	if err != nil {
-		return fmt.Errorf("failed to stop container: %w", err)
+		// If a container is already stopped, continue to removal
+		if !strings.Contains(err.Error(), "is not running") {
+			return fmt.Errorf("failed to stop container: %w", err)
+		}
+		log.Printf("[Docker] Container %s was already stopped; continuing with cleanup", containerID[:12])
 	}
 
-	// Resolve container name from its ID
-	name, err := m.GetContainerName(containerID)
-	if err != nil {
-		log.Printf("[Registry] Could not resolve name for container ID %s: %v", containerID[:12], err)
-		return nil // Still return nil so StopContainer isn't considered a failure
+	// Deregister before removal when having a resolved name
+	if nameErr == nil {
+		if err := m.registry.Deregister(name); err != nil {
+			log.Printf("[Registry] Failed to deregister service: %q: %v", name, err)
+		} else {
+			log.Printf("[Registry] Deregistered service %q", name)
+		}
 	}
 
-	// Deregister the service from the registry
-	if err := m.registry.Deregister(name); err != nil {
-		log.Printf("[Registry] Failed to deregister service %q: %v", name, err)
-	} else {
-		log.Printf("[Registry] Deregistered service %q", name)
+	// Remove the container
+	if err := m.cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{
+		Force: true,
+	}); err != nil {
+		return fmt.Errorf("failed to remove container: %w", err)
 	}
 
 	return nil
@@ -208,6 +221,19 @@ func (m *ContainerManager) ListContainers() ([]types.Container, error) {
 
 	return containers, nil
 }
+
+// ListRunningContainers exists for explicit live-runtime listing for reconciliation and operational APIs.
+func (m *ContainerManager) ListRunningContainers() ([]types.Container, error) {
+	ctx := context.Background()
+
+	containers, err := m.cli.ContainerList(ctx, types.ContainerListOptions{All: false})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list running containers: %w", err)
+	}
+
+	return containers, nil
+}
+
 
 // StartHealthMonitor starts a background goroutine that checks the health of a container's HTTP endpoint
 // every 30 seconds. If the check fails, the container is restarted.
