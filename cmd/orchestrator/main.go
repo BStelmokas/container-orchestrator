@@ -1,18 +1,18 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"orchestrator/internal/domain"
+	"orchestrator/internal/health"
 	"orchestrator/internal/manager"
 	"orchestrator/internal/orchestrator"
 	"orchestrator/internal/state"
+	"orchestrator/internal/status"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,9 +27,18 @@ func main() {
 	// Create a dedicated desired-state store.
 	serviceStore := state.NewServiceStore()
 
+	// Create the centralized health tracker.
+	healthTracker := health.NewTracker()
+
+	// Inject the health tracker into the runtime layer.
+	manager.SetHealthTracker(healthTracker)
+
 	// Initialize and start deployment controller (manages desired replica state).
-	controller := orchestrator.NewDeploymentController(manager, serviceStore, 10*time.Second)
+	controller := orchestrator.NewDeploymentController(manager, serviceStore, healthTracker, 10*time.Second)
 	controller.Start()
+
+	// Build a centralized status layer for the API/dashboard.
+	statusBuilder := status.NewBuilder(serviceStore, manager, healthTracker)
 
 	r := gin.Default()
 
@@ -38,56 +47,13 @@ func main() {
 
 	// /api/services
 	r.GET("/api/services", func(c *gin.Context) {
-		containers, err := manager.ListRunningContainers()
+		services, err := statusBuilder.ListServices()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list running containers"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build service status"})
 			return
 		}
 
-		specs := serviceStore.List()
-
-		// Group containers.
-		serviceMap := make(map[string][]string)
-		serviceImages := make(map[string]string)
-		desiredCounts := make(map[string]int)
-		runningCounts := make(map[string]int)
-
-		for _, spec := range specs {
-			serviceImages[spec.Name] = spec.Image
-			desiredCounts[spec.Name] = spec.Replicas
-
-			for _, cont := range containers {
-				if len(cont.Names) == 0 {
-					continue
-				}
-
-				if matchesServiceName(cont.Names[0], spec.Name) {
-					label := fmt.Sprintf("%s (%s)", cont.ID[:12], cont.Status)
-					serviceMap[spec.Name] = append(serviceMap[spec.Name], label)
-					runningCounts[spec.Name]++
-				}
-			}
-		}
-
-		// Return services in sorted order for a stable UI experience.
-		names := make([]string, 0, len(desiredCounts))
-		for name := range desiredCounts {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-
-		var result []gin.H
-		for _, name := range names {
-			result = append(result, gin.H{
-				"name": name,
-				"image": serviceImages[name],
-				"desiredReplicas": desiredCounts[name],
-				"runningReplicas": runningCounts[name],
-				"containers": serviceMap[name],
-			})
-		}
-
-		c.JSON(http.StatusOK, gin.H{"services": result})
+		c.JSON(http.StatusOK, gin.H{"services": services})
 	})
 
 	// Service-centric create/update endpoint.
@@ -291,36 +257,16 @@ func main() {
 	r.GET("/status/:name", func(c *gin.Context) {
 		name := c.Param("name")
 
-		spec, found := serviceStore.Get(name)
+		serviceStatus, found, err := statusBuilder.GetService(name)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build service status"})
+		}
 		if !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
 			return
 		}
 
-		containers, err := manager.ListRunningContainers()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list running containers"})
-			return
-		}
-
-		var result []string
-		for _, cont := range containers {
-			if len(cont.Names) == 0 {
-				continue
-			}
-
-			if matchesServiceName(cont.Names[0], name) {
-				result = append(result, cont.ID[:12]+" ("+cont.Status+")")
-			}
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"name": spec.Name,
-			"image": spec.Image,
-			"desiredReplicas": spec.Replicas,
-			"runningReplicas": len(result),
-			"containers": result,
-		})
+		c.JSON(http.StatusOK, serviceStatus)
 	})
 
 	// GET /logs/:name

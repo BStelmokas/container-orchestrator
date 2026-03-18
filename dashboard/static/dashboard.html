@@ -53,6 +53,10 @@
               <div><strong>Image:</strong> ${service.image}</div>
               <div><strong>Desired Replicas:</strong> ${service.desiredReplicas}</div>
               <div><strong>Running Replicas:</strong> ${service.runningReplicas}</div>
+              <div><strong>Healthy Replicas:</strong> ${service.healthyReplicas}</div>
+              <div><strong>Unhealthy Replicas:</strong> ${service.unhealthyReplicas}</div>
+              <div><strong>Unknown Replicas:</strong> ${service.unknownReplicas}</div>
+              <div class="service-status"><strong>Status:</div> ${service.overallStatus}
             </div>
           `;
 
