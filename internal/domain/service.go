@@ -9,12 +9,17 @@ type ServiceSpec struct {
 	Name     string
 	Image    string
 	Replicas int
+	Generation int64
 }
 
 // Normalize returns a cleaned copy of the spec.
 func (s ServiceSpec) Normalize() ServiceSpec {
 	s.Name = strings.TrimSpace(s.Name)
 	s.Image = strings.TrimSpace(s.Image)
+
+	if s.Generation < 0 {
+		s.Generation = 0
+	}
 	return s
 }
 
@@ -36,6 +41,10 @@ func (s ServiceSpec) Validate() error {
 
 	if s.Replicas < 1 {
 		return fmt.Errorf("replicas must be at least 1")
+	}
+
+	if s.Generation < 1 {
+		return fmt.Errorf("generation must be at least 1")
 	}
 
 	return nil

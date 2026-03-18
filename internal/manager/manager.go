@@ -53,7 +53,7 @@ func (m *ContainerManager) SetHealthTracker(tracker *health.Tracker) {
 }
 
 // StartContainer starts a container with the specified image name
-func (m *ContainerManager) StartContainer(serviceName, imageName, containerName string) (string, error) {
+func (m *ContainerManager) StartContainer(serviceName, imageName, containerName string, generation int64) (string, error) {
 	ctx := context.Background()
 
 	// Pull image from Docker Hub if not available
@@ -87,10 +87,17 @@ func (m *ContainerManager) StartContainer(serviceName, imageName, containerName 
 		},
 	}
 
+	// Write orchestrator metadata into Docker labels.
+	labels := map [string]string {
+		"orchestrator.service": serviceName,
+		"orchestrator.generation": strconv.FormatInt(generation, 10),
+	}
+
 	// Create container with networking setup
 	resp, err := m.cli.ContainerCreate(ctx, &container.Config{
 		Image:        imageName,
 		ExposedPorts: exposedPorts, // So Docker knows port 80 is in use
+		Labels: labels,
 	}, hostConfig, nil, nil, containerName)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)

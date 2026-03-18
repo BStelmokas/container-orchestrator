@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"orchestrator/internal/domain"
 	"orchestrator/internal/health"
 	"orchestrator/internal/manager"
@@ -73,9 +75,19 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 	var available []string // Replicas that are running and not explicitly unhealthy.
 	var unhealthy []string // Replicas the health tracker has explicitly marked unhealthy.
 
+	// Track old-generation replicas separately so restart can roll forward gradually.
+	var outdated []types.Container
+
 	for _, c := range containers {
 		// Docker container names start with "/" - check for name prefix
 		if len(c.Names) == 0 || !matchesServiceContainerName(c.Names[0], spec.Name) {
+			continue
+		}
+
+		// Containers with an older generation are considered outdated.
+		// They are still running, but they no longer match desired state.
+		if containerGeneration(c) != spec.Generation {
+			outdated = append(outdated, c)
 			continue
 		}
 
@@ -99,6 +111,44 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 		}
 	}
 
+	// Rolling restart behavior.
+	if len(outdated) > 0 {
+		if len(available) < spec.Replicas {
+			containerName := spec.Name + "-" + randomSuffix()
+
+			id, err := d.manager.StartContainer(spec.Name, spec.Image, containerName, spec.Generation)
+			if err != nil {
+				log.Printf("[Deployer] Failed to start rollout replica for service %q: %v", spec.Name, err)
+			} else {
+				log.Printf("[Deployer] Started rollout replica %s for service %q generation %d", id[:12], spec.Name, spec.Generation)
+				available = append(available, id)
+			}
+
+			d.mu.Lock()
+			d.running[spec.Name] = available
+			d.mu.Unlock()
+			return
+		}
+
+		outdatedContainer := outdated[0]
+		log.Printf(
+			"[Deployer] Removing outdated replica %s for service %q oldGeneration=%d desiredGeneration=%d",
+			outdatedContainer.ID[:12],
+			spec.Name,
+			containerGeneration(outdatedContainer),
+			spec.Generation,
+		)
+
+		if err := d.manager.StopContainer(outdatedContainer.ID); err != nil {
+			log.Printf("[Deployer] Failed to remove outdated container %s for service %q: %v", outdatedContainer.ID[:12], spec.Name, err)
+		}
+
+		d.mu.Lock()
+		d.running[spec.Name] = available
+		d.mu.Unlock()
+		return
+	}
+
 	// Calculate how many replicas are missing
 	missing := spec.Replicas - len(available)
 
@@ -109,7 +159,7 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 	// When needing more containers, start them
 	for i := 0; i < missing; i++ {
 		containerName := spec.Name + "-" + randomSuffix() // ensure unique name
-		id, err := d.manager.StartContainer(spec.Name, spec.Image, containerName)
+		id, err := d.manager.StartContainer(spec.Name, spec.Image, containerName, spec.Generation)
 		if err != nil {
 			log.Printf("Failed to start container for service %q: %v", spec.Name, err)
 			continue
@@ -144,6 +194,25 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 func matchesServiceContainerName(containerDockerName, serviceName string) bool {
 	trimmed := strings.TrimPrefix(containerDockerName, "/")
 	return trimmed == serviceName || strings.HasPrefix(trimmed, serviceName+"-")
+}
+
+// containerGeneration reads the generation label attached at container creation time.
+func containerGeneration(c types.Container) int64 {
+	if c.Labels == nil {
+		return 0
+	}
+
+	raw := c.Labels["orcherstrator.generation"]
+	if raw == "" {
+		return 0
+	}
+
+	generation, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0
+	}
+
+	return generation
 }
 
 // randomSuffix generates a short random string to differentiate container names

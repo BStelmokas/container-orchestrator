@@ -24,12 +24,25 @@ func NewServiceStore() *ServiceStore {
 func (s *ServiceStore) Upsert(spec domain.ServiceSpec) error {
 	spec = spec.Normalize()
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Preserve generation across ordinary updates unless the caller explicitly supplies a positive generation.
+	if existing, found := s.services[spec.Name]; found {
+		if spec.Generation < 1 {
+			spec.Generation = existing.Generation
+		}
+	} else {
+		// Newly created services start at generation 1.
+		if spec.Generation < 1 {
+			spec.Generation = 1
+		}
+	}
+
 	if err := spec.Validate(); err != nil {
 		return err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	s.services[spec.Name] = spec // Desired state is keyed by logical service name
 	return nil
@@ -74,6 +87,25 @@ func (s *ServiceStore) Scale(name string, replicas int) (domain.ServiceSpec, boo
 	}
 
 	spec.Replicas = replicas
+	if err := spec.Validate(); err != nil {
+		return domain.ServiceSpec{}, true, err
+	}
+
+	s.services[name] = spec
+	return spec, true, nil
+}
+
+// RequestRestart bumps the service generation.
+func (s *ServiceStore) RequestRestart(name string) (domain.ServiceSpec, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	spec, found := s.services[name]
+	if !found {
+		return domain.ServiceSpec{}, false, nil
+	}
+
+	spec.Generation++
 	if err := spec.Validate(); err != nil {
 		return domain.ServiceSpec{}, true, err
 	}

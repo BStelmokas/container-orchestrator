@@ -144,36 +144,18 @@ func main() {
 	r.POST("/api/restart/:name", func(c *gin.Context) {
 		name := c.Param("name")
 
-		// Get list of all containers
-		if _, found := serviceStore.Get(name); !found {
+		updatedSpec, found, err := serviceStore.RequestRestart(name)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
 			return
 		}
 
-		containers, err := manager.ListRunningContainers()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list running containers"})
-			return
-		}
-
-		stoppedAny := false
-		for _, cont := range containers {
-			if len(cont.Names) == 0 {
-				continue
-			}
-
-			if matchesServiceName(cont.Names[0], name) {
-				log.Printf("[Restart] Stopping container: %s", cont.ID[:12])
-				if err := manager.StopContainer(cont.ID); err != nil {
-					log.Printf("[Restart] Failed stopping container %s: %v", cont.ID[:12], err)
-					continue
-				}
-				stoppedAny = true
-			}
-		}
-
-		if !stoppedAny {
-			c.JSON(http.StatusNotFound, gin.H{"error": "no running containers found for service " + name})
+		if err := serviceStore.SaveToFile(desiredStateFilePath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
 			return
 		}
 
@@ -181,6 +163,7 @@ func main() {
 
 		c.JSON(http.StatusOK, gin.H{
 			"service": name,
+			"generation": updatedSpec.Generation,
 			"status":  "restart triggered",
 		})
 	})
