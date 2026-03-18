@@ -148,7 +148,7 @@ func matchesServiceName(containerDockerName, serviceName string) bool {
 // FormatServiceSummary is a small helper for logs, future UI use.
 func FormatServiceSummary(s ServiceStatus) string {
 	return fmt.Sprintf(
-		"%s image=%s desired=%d running=%d healthy=%d unhealthy=%d unknown=%d status=%s",
+		"%s image=%s desired=%d running=%d healthy=%d unhealthy=%d unknown=%d generation=%d status=%s",
 		s.Name,
 		s.Image,
 		s.DesiredReplicas,

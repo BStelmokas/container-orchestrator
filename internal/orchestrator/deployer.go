@@ -257,7 +257,7 @@ func containerGeneration(c types.Container) int64 {
 		return 0
 	}
 
-	raw := c.Labels["orcherstrator.generation"]
+	raw := c.Labels["orchestrator.generation"]
 	if raw == "" {
 		return 0
 	}
