@@ -61,7 +61,7 @@ func (s *ServiceStore) LoadFromFile(path string) error {
 		return err
 	}
 
-	s.mu.Unlock()
+	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Replace the in-memory store with the restored snapshot so boot is deterministic.
