@@ -17,6 +17,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Persist desired services in a stable local file.
+const desiredStateFilePath = "data/services.json"
+
 func main() {
 	// Initialize the Docker-based container manager.
 	manager, err := manager.NewContainerManager()
@@ -26,6 +29,11 @@ func main() {
 
 	// Create a dedicated desired-state store.
 	serviceStore := state.NewServiceStore()
+
+	// Restore desired state before the controller starts.
+	if err := serviceStore.LoadFromFile(desiredStateFilePath); err != nil {
+		log.Fatalf("failed to load desired service state: %v", err)
+	}
 
 	// Create the centralized health tracker.
 	healthTracker := health.NewTracker()
@@ -69,6 +77,12 @@ func main() {
 			return
 		}
 
+		// Persist desired state after mutation.
+		if err := serviceStore.SaveToFile(desiredStateFilePath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
+			return
+		}
+
 		controller.ReconcileNow() // Trigger immediate convergence after desired-state mutation
 
 		c.JSON(http.StatusOK, gin.H{
@@ -108,6 +122,12 @@ func main() {
 		}
 		if !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
+			return
+		}
+
+		// Persist scale changes so desired replica count survives restarts.
+		if err := serviceStore.SaveToFile(desiredStateFilePath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
 			return
 		}
 
@@ -174,6 +194,12 @@ func main() {
 			return
 		}
 
+		// Persist the delete before reconciliation so a process restart does not resurrect the service.
+		if err := serviceStore.SaveToFile(desiredStateFilePath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
+			return
+		}
+
 		containers, err := manager.ListRunningContainers()
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list running containers"})
@@ -218,6 +244,12 @@ func main() {
 			return
 		}
 
+		// Persist the legacy deploy endpoint too, so all write paths stay consistent.
+		if err := serviceStore.SaveToFile(desiredStateFilePath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
+			return
+		}
+
 		controller.ReconcileNow()
 
 		c.JSON(http.StatusOK, gin.H{"status": "deployment stored", "service": req.Name})
@@ -241,6 +273,11 @@ func main() {
 		}
 		if !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
+			return
+		}
+
+		if err := serviceStore.SaveToFile(desiredStateFilePath); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
 			return
 		}
 
