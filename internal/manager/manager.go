@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -17,14 +16,15 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
+	"orchestrator/internal/health"
 	"orchestrator/internal/registry"
 )
 
 // ContainerManager manages Docker containers via the Docker API.
 type ContainerManager struct {
 	cli      *client.Client
-	mu       sync.Mutex // Protects container restart logic to avoid race conditions
 	registry *registry.Client
+	tracker *health.Tracker
 }
 
 // NewContainerManager creates a new Docker client using environment configuration.
@@ -43,7 +43,13 @@ func NewContainerManager() (*ContainerManager, error) {
 	return &ContainerManager{
 		cli:      cli,
 		registry: reg,
+		tracker: nil,
 	}, nil
+}
+
+// SetHealthTracker injects the centralized health tracker into the runtime layer.
+func (m *ContainerManager) SetHealthTracker(tracker *health.Tracker) {
+	m.tracker = tracker
 }
 
 // StartContainer starts a container with the specified image name
@@ -145,8 +151,13 @@ func (m *ContainerManager) StartContainer(serviceName, imageName, containerName 
 		log.Printf("[Registry] Registered service %q instance %s at %s:%d", serviceName, resp.ID[:12], ip, port)
 	}
 
+	// Seed the centralized tracker.
+	if m.tracker != nil {
+		m.tracker.Register(resp.ID, serviceName, containerName, healthURL)
+	}
+
 	// To health-check each container
-	m.StartHealthMonitor(resp.ID, serviceName, containerName, imageName, healthURL)
+	m.StartHealthMonitor(resp.ID, serviceName, containerName, healthURL)
 
 	return resp.ID, nil
 }
@@ -212,6 +223,11 @@ func (m *ContainerManager) StopContainer(containerID string) error {
 		}
 	}
 
+	// Remove health state during container cleanup.
+	if m.tracker != nil {
+		m.tracker.Remove(containerID)
+	}
+
 	// Remove the container
 	if err := m.cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{
 		Force: true,
@@ -248,7 +264,7 @@ func (m *ContainerManager) ListRunningContainers() ([]types.Container, error) {
 
 // StartHealthMonitor starts a background goroutine that checks the health of a container's HTTP endpoint
 // every 30 seconds. If the check fails, the container is restarted.
-func (m *ContainerManager) StartHealthMonitor(containerID, serviceName, containerName, imageName, healthURL string) {
+func (m *ContainerManager) StartHealthMonitor(containerID, serviceName, containerName, healthURL string) {
 	go func() {
 		for {
 			time.Sleep(30 * time.Second)
@@ -257,43 +273,41 @@ func (m *ContainerManager) StartHealthMonitor(containerID, serviceName, containe
 
 			resp, err := http.Get(healthURL)
 
-			// Handle failures first: prevent panic by checking if resp is nil
+			// Before reporting a result verify the container still exists.
+			ctx := context.Background()
+			_, inspectErr := m.cli.ContainerInspect(ctx, containerID)
+			if inspectErr != nil {
+				log.Printf("[HealthCheck] Stopping monitor for removed container %s", containerID[:12])
+				if resp != nil {
+					resp.Body.Close()
+				}
+				if m.tracker != nil {
+					m.tracker.Remove(containerID)
+				}
+				return
+			}
+
+			// Prevent panic by checking if resp is nil.
 			if err != nil {
 				log.Printf("[HealthCheck] FAILED (unreachable, err: %v)", err)
+
+				if m.tracker != nil {
+					m.tracker.ReportUnhealthy(containerID, err.Error())
+				}
 			} else if resp.StatusCode >= 400 {
 				log.Printf("[HealthCheck] FAILED (bad status: %d)", resp.StatusCode)
+
+				if m.tracker != nil {
+					m.tracker.ReportUnhealthy(containerID, fmt.Sprintf("bad status: %d", resp.StatusCode))
+				}
 			} else {
 				log.Printf("[HealthCheck] OK (status: %d)", resp.StatusCode)
+
+				if m.tracker != nil {
+					m.tracker.ReportHealthy(containerID)
+				}
 			}
 
-			// If health check failed, restart container
-			if err != nil || (resp != nil && resp.StatusCode >= 400) {
-				// Before trying to stop or restart, confirm the container still exists
-				ctx := context.Background()
-				_, err := m.cli.ContainerInspect(ctx, containerID)
-				if err != nil {
-					log.Printf("[HealthCheck] Skipping - container %s no longer exits", containerID[:12])
-					continue
-				}
-
-				m.mu.Lock()
-
-				if stopErr := m.StopContainer(containerID); stopErr != nil {
-					log.Printf("[HealthCheck] Failed to stop container: %v", stopErr)
-				}
-
-				newID, startErr := m.StartContainer(serviceName, imageName, containerName)
-				if startErr != nil {
-					log.Printf("[HealthCheck] Failed to restart container: %v", startErr)
-				} else {
-					containerID = newID
-					log.Printf("[HealthCheck] Container restarted successfully. New ID: %s", newID[:12])
-				}
-
-				m.mu.Unlock()
-			}
-
-			// Only close response if it was returned
 			if resp != nil {
 				resp.Body.Close()
 			}
