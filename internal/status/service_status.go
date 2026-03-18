@@ -31,6 +31,7 @@ type ServiceStatus struct {
 	UnknownReplicas   int             `json:"unknownReplicas"`
 	OverallStatus     string          `json:"overallStatus"`
 	Containers        []ReplicaStatus `json:"containers"`
+	Generation        int64 `json:"generation"`
 }
 
 // Builder computes service status from desired state + runtime state + health state.
@@ -60,7 +61,7 @@ func (b *Builder) ListServices() ([]ServiceStatus, error) {
 
 	result := make([]ServiceStatus, 0, len(specs))
 	for _, spec := range specs {
-		result = append(result, b.buildServiceStatus(spec.Name, spec.Image, spec.Replicas, containers))
+		result = append(result, b.buildServiceStatus(spec.Name, spec.Image, spec.Replicas, spec.Generation, containers))
 	}
 
 	return result, nil
@@ -78,15 +79,16 @@ func (b *Builder) GetService(name string) (ServiceStatus, bool, error) {
 		return ServiceStatus{}, true, err
 	}
 
-	return b.buildServiceStatus(spec.Name, spec.Image, spec.Replicas, containers), true, nil
+	return b.buildServiceStatus(spec.Name, spec.Image, spec.Replicas, spec.Generation, containers), true, nil
 }
 
 // buildServiceStatus creates the status view for one service from a shared container snapshot.
-func (b *Builder) buildServiceStatus(name, image string, desired int, containers []types.Container) ServiceStatus {
+func (b *Builder) buildServiceStatus(name, image string, desired int, generation int64, containers []types.Container) ServiceStatus {
 	status := ServiceStatus{
 		Name:            name,
 		Image:           image,
 		DesiredReplicas: desired,
+		Generation: generation,
 		Containers:      []ReplicaStatus{},
 	}
 
@@ -154,6 +156,7 @@ func FormatServiceSummary(s ServiceStatus) string {
 		s.HealthyReplicas,
 		s.UnhealthyReplicas,
 		s.UnknownReplicas,
+		s.Generation,
 		s.OverallStatus,
 	)
 }

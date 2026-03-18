@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"orchestrator/internal/domain"
+	"orchestrator/internal/events"
 	"orchestrator/internal/health"
 	"orchestrator/internal/manager"
 	"orchestrator/internal/orchestrator"
@@ -38,11 +40,22 @@ func main() {
 	// Create the centralized health tracker.
 	healthTracker := health.NewTracker()
 
+	// Create a centralized event recorder for recent control-plane activity.
+	eventRecorder := events.NewRecorder(200)
+
+
 	// Inject the health tracker into the runtime layer.
 	manager.SetHealthTracker(healthTracker)
+	manager.SetEventRecorder(eventRecorder)
 
 	// Initialize and start deployment controller (manages desired replica state).
-	controller := orchestrator.NewDeploymentController(manager, serviceStore, healthTracker, 10*time.Second)
+	controller := orchestrator.NewDeploymentController(
+		manager,
+		serviceStore,
+		healthTracker,
+		eventRecorder,
+		10*time.Second,
+	)
 	controller.Start()
 
 	// Build a centralized status layer for the API/dashboard.
@@ -64,6 +77,14 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"services": services})
 	})
 
+	// Expose control-plane events to the dashboard and operators.
+	r.GET("/api/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"events": eventRecorder.List(50),
+		})
+	})
+
+
 	// Service-centric create/update endpoint.
 	r.POST("/api/services", func(c *gin.Context) {
 		var req domain.ServiceSpec
@@ -82,6 +103,12 @@ func main() {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
 			return
 		}
+
+		// Record desired-state writes as explicit API events.
+		eventRecorder.Add(
+			"api",
+			fmt.Sprintf("stored service=%s image=%s replicas=%d", req.Name, req.Image, req.Replicas),
+		)
 
 		controller.ReconcileNow() // Trigger immediate convergence after desired-state mutation
 

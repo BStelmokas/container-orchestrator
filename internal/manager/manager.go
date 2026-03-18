@@ -16,6 +16,7 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
+	"orchestrator/internal/events"
 	"orchestrator/internal/health"
 	"orchestrator/internal/registry"
 )
@@ -25,6 +26,7 @@ type ContainerManager struct {
 	cli      *client.Client
 	registry *registry.Client
 	tracker  *health.Tracker
+	recorder *events.Recorder
 }
 
 // NewContainerManager creates a new Docker client using environment configuration.
@@ -44,12 +46,18 @@ func NewContainerManager() (*ContainerManager, error) {
 		cli:      cli,
 		registry: reg,
 		tracker:  nil,
+		recorder: nil,
 	}, nil
 }
 
 // SetHealthTracker injects the centralized health tracker into the runtime layer.
 func (m *ContainerManager) SetHealthTracker(tracker *health.Tracker) {
 	m.tracker = tracker
+}
+
+// SetEventRecorder injects the centralized control-plane event recorder.
+func (m *ContainerManager) SetEventRecorder(recorder *events.Recorder) {
+	m.recorder = recorder
 }
 
 // StartContainer starts a container with the specified image name
@@ -163,6 +171,20 @@ func (m *ContainerManager) StartContainer(serviceName, imageName, containerName 
 		m.tracker.Register(resp.ID, serviceName, containerName, healthURL)
 	}
 
+	// Record container creation as a control-plane event.
+	if m.recorder != nil {
+		m.recorder.Add(
+			"runtime",
+			fmt.Sprintf(
+				"started container %s for service=%s generation=%d image=%s",
+				resp.ID[:12],
+				serviceName,
+				generation,
+				imageName,
+			),
+		)
+	}
+
 	// To health-check each container
 	m.StartHealthMonitor(resp.ID, serviceName, containerName, healthURL)
 
@@ -235,6 +257,18 @@ func (m *ContainerManager) StopContainer(containerID string) error {
 		m.tracker.Remove(containerID)
 	}
 
+	// Record removal before the Docker object disappears from view.
+	if m.recorder != nil {
+		if inspectErr == nil && serviceName != "" {
+			m.recorder.Add(
+				"runtime",
+				fmt.Sprintf("stopping container %s for service=%s", inspection.ID[:12], serviceName),
+			)
+		} else {
+			m.recorder.Add("runtime", fmt.Sprintf("stopping container %s", containerID[:12]))
+		}
+	}
+
 	// Remove the container
 	if err := m.cli.ContainerRemove(ctx, containerID, types.ContainerRemoveOptions{
 		Force: true,
@@ -300,11 +334,26 @@ func (m *ContainerManager) StartHealthMonitor(containerID, serviceName, containe
 				if m.tracker != nil {
 					m.tracker.ReportUnhealthy(containerID, err.Error())
 				}
+
+				// Record explicit health failures for operators.
+				if m.recorder != nil {
+					m.recorder.Add(
+						"health",
+						fmt.Sprintf("service=%s container=%s unhealthy reason=%s", serviceName, containerID[:12], err.Error()),
+					)
+				}
 			} else if resp.StatusCode >= 400 {
 				log.Printf("[HealthCheck] FAILED (bad status: %d)", resp.StatusCode)
 
 				if m.tracker != nil {
 					m.tracker.ReportUnhealthy(containerID, fmt.Sprintf("bad status: %d", resp.StatusCode))
+				}
+
+				if m.recorder != nil {
+					m.recorder.Add(
+						"health",
+						fmt.Sprintf("service=%s container=%s unhealthy reason=bad status %d", serviceName, containerID[:12], resp.StatusCode),
+					)
 				}
 			} else {
 				log.Printf("[HealthCheck] OK (status: %d)", resp.StatusCode)

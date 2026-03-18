@@ -3,17 +3,20 @@ package orchestrator
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"orchestrator/internal/domain"
+	"orchestrator/internal/events"
 	"orchestrator/internal/health"
 	"orchestrator/internal/manager"
 	"orchestrator/internal/state"
+
+	"github.com/docker/docker/api/types"
 )
 
 // DeploymentController is responsible for reconciling desired service state with actual running containers.
@@ -21,17 +24,25 @@ type DeploymentController struct {
 	manager     *manager.ContainerManager // handles container operations
 	store       *state.ServiceStore       // desired state source of truth
 	tracker     *health.Tracker
+	recorder 		*events.Recorder
 	running     map[string][]string // containerIDs currently running per service
 	mu          sync.Mutex          // protects access to specs and running maps
 	checkPeriod time.Duration       // how often to reconcile state
 }
 
 // NewDeploymentController creates a new deployment controller instance
-func NewDeploymentController(m *manager.ContainerManager, store *state.ServiceStore, tracker *health.Tracker, checkPeriod time.Duration) *DeploymentController {
+func NewDeploymentController(
+	m *manager.ContainerManager,
+	store *state.ServiceStore,
+	tracker *health.Tracker,
+	recorder *events.Recorder,
+	checkPeriod time.Duration,
+	) *DeploymentController {
 	return &DeploymentController{
 		manager:     m,
 		store:       store,
 		tracker:     tracker,
+		recorder: recorder,
 		running:     make(map[string][]string),
 		checkPeriod: checkPeriod,
 	}
@@ -105,6 +116,13 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 	for _, containerID := range unhealthy {
 		log.Printf("[Deployer] Replacing unhealthy replica %s for service %q", containerID[:12], spec.Name)
 
+		if d.recorder != nil {
+			d.recorder.Add(
+			"reconcile",
+			fmt.Sprintf("replacing unhealthy replica %s for service=%s", containerID[:12], spec.Name),
+			)
+		}
+
 		if err := d.manager.StopContainer(containerID); err != nil {
 			log.Printf("[Deployer] Failed to remove unhealthy container %s for service %q: %v", containerID[:12], spec.Name, err)
 			continue
@@ -121,6 +139,14 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 				log.Printf("[Deployer] Failed to start rollout replica for service %q: %v", spec.Name, err)
 			} else {
 				log.Printf("[Deployer] Started rollout replica %s for service %q generation %d", id[:12], spec.Name, spec.Generation)
+
+				if d.recorder != nil {
+					d.recorder.Add(
+						"reconcile",
+						fmt.Sprintf("started rollout replica %s for service=%s generation=%d", id[:12], spec.Name, spec.Generation),
+					)
+				}
+
 				available = append(available, id)
 			}
 
@@ -138,6 +164,19 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 			containerGeneration(outdatedContainer),
 			spec.Generation,
 		)
+
+		if d.recorder != nil {
+			d.recorder.Add(
+				"reconcile",
+				fmt.Sprintf(
+					"removing outdated replica %s for service=%s oldGeneration=%d desiredGeneration=%d",
+					outdatedContainer.ID[:12],
+					spec.Name,
+					containerGeneration(outdatedContainer),
+					spec.Generation,
+				),
+			)
+		}
 
 		if err := d.manager.StopContainer(outdatedContainer.ID); err != nil {
 			log.Printf("[Deployer] Failed to remove outdated container %s for service %q: %v", outdatedContainer.ID[:12], spec.Name, err)
@@ -164,6 +203,14 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 			log.Printf("Failed to start container for service %q: %v", spec.Name, err)
 			continue
 		}
+
+		if d.recorder != nil {
+			d.recorder.Add(
+				"reconcile",
+				fmt.Sprintf("started replica %s for service=%s generation=%d", id[:12], spec.Name, spec.Generation),
+			)
+		}
+
 		log.Printf("Started container %s for service %q", id[:12], spec.Name)
 		available = append(available, id)
 	}
@@ -174,6 +221,14 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 
 		for i := 0; i < -missing; i++ {
 			containerId := available[len(available)-1]
+
+			if d.recorder != nil {
+				d.recorder.Add(
+					"reconcile",
+					fmt.Sprintf("scaling down replica %s for service=%s", containerId[:12], spec.Name),
+				)
+			}
+
 			err := d.manager.StopContainer(containerId)
 			if err != nil {
 				log.Printf("Failed to stop container for service %q: %v", spec.Name, err)
