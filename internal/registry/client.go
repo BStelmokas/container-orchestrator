@@ -20,23 +20,23 @@ func NewClient(baseURL string) *Client {
 
 type registerRequest struct {
 	ServiceName string `json:"serviceName"`
-	InstanceID string `json:"instanceID"`
-	IP string `json:"ip"`
-	Port int `json:"port"`
+	InstanceID  string `json:"instanceID"`
+	IP          string `json:"ip"`
+	Port        int    `json:"port"`
 }
 
 type deregisterRequest struct {
 	ServiceName string `json:"serviceName"`
-	InstanceID string `json:"instanceID"`
+	InstanceID  string `json:"instanceID"`
 }
 
 // Register a service in the registry.
 func (c *Client) Register(serviceName, instanceID, ip string, port int) error {
 	body := registerRequest{
 		ServiceName: serviceName,
-		InstanceID: instanceID,
-		IP: ip,
-		Port: port,
+		InstanceID:  instanceID,
+		IP:          ip,
+		Port:        port,
 	}
 
 	data, err := json.Marshal(body)
@@ -61,7 +61,7 @@ func (c *Client) Register(serviceName, instanceID, ip string, port int) error {
 func (c *Client) Deregister(serviceName, instanceID string) error {
 	body := deregisterRequest{
 		ServiceName: serviceName,
-		InstanceID: instanceID,
+		InstanceID:  instanceID,
 	}
 
 	data, err := json.Marshal(body)

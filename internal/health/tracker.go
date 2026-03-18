@@ -1,6 +1,6 @@
 package health
 
-import(
+import (
 	"sort"
 	"sync"
 	"time"
@@ -8,19 +8,19 @@ import(
 
 // Report represents the latest known health information for one concrete container replica.
 type Report struct {
-	ContainerID string
-	ServiceName string
+	ContainerID   string
+	ServiceName   string
 	ContainerName string
-	HealthURL string
-	Healthy bool
-	HasCheck bool
-	LastChecked time.Time
-	LastError string
+	HealthURL     string
+	Healthy       bool
+	HasCheck      bool
+	LastChecked   time.Time
+	LastError     string
 }
 
 // Tracker is the centralized in-memory health state store.
 type Tracker struct {
-	mu sync.RWMutex
+	mu      sync.RWMutex
 	reports map[string]Report
 }
 
@@ -37,14 +37,14 @@ func (t *Tracker) Register(containerID, serviceName, containerName, healthURL st
 	defer t.mu.Unlock()
 
 	t.reports[containerID] = Report{
-		ContainerID: containerID,
-		ServiceName: serviceName,
+		ContainerID:   containerID,
+		ServiceName:   serviceName,
 		ContainerName: containerName,
-		HealthURL: healthURL,
-		Healthy: false,
-		HasCheck: false, // Prevents the reconciler from treating a brand-new replica as explicitly unhealthy.
-		LastChecked: time.Time{},
-		LastError: "",
+		HealthURL:     healthURL,
+		Healthy:       false,
+		HasCheck:      false, // Prevents the reconciler from treating a brand-new replica as explicitly unhealthy.
+		LastChecked:   time.Time{},
+		LastError:     "",
 	}
 }
 

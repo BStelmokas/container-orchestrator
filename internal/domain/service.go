@@ -6,8 +6,8 @@ import (
 )
 
 type ServiceSpec struct {
-	Name string
-	Image string
+	Name     string
+	Image    string
 	Replicas int
 }
 

@@ -8,22 +8,22 @@ import (
 	"strconv"
 	"sync"
 
-	"orchestrator/internal/registry"
 	"github.com/gin-gonic/gin"
+	"orchestrator/internal/registry"
 )
 
 // LoadBalancer holds round-robin state per logical service.
 type LoadBalancer struct {
 	registry *registry.Client
-	mu sync.Mutex
-	next map[string]int
+	mu       sync.Mutex
+	next     map[string]int
 }
 
 // NewLoadBalancer creates a new load balancer instance.
 func NewLoadBalancer(registryBaseURL string) *LoadBalancer {
 	return &LoadBalancer{
 		registry: registry.NewClient(registryBaseURL),
-		next: make(map[string]int),
+		next:     make(map[string]int),
 	}
 }
 

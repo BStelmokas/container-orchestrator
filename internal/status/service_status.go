@@ -13,29 +13,29 @@ import (
 
 // ReplicaStatus describes one running replica as seen by the status layer.
 type ReplicaStatus struct {
-	ContainerID string `json:"containerID"`
+	ContainerID   string `json:"containerID"`
 	ContainerName string `json:"containerName"`
 	RuntimeStatus string `json:"runtimeStatus"`
-	HealthStatus string `json:"healthStatus"`
-	LastError string `json:"lastError,omitempty"`
+	HealthStatus  string `json:"healthStatus"`
+	LastError     string `json:"lastError,omitempty"`
 }
 
 // ServiceStatus is the centralized status view exposed to the API and dashboard.
 type ServiceStatus struct {
-	Name string `json:"name"`
-	Image string `json:"image"`
-	DesiredReplicas int `json:"desiredReplicas"`
-	RunningReplicas int `json:"runningReplicas"`
-	HealthyReplicas int `json:"healthyReplicas"`
-	UnhealthyReplicas int `json:"unhealthyReplicas"`
-	UnknownReplicas int `json:"unknownReplicas"`
-	OverallStatus string `json:"overallStatus"`
-	Containers []ReplicaStatus `json:"containers"`
+	Name              string          `json:"name"`
+	Image             string          `json:"image"`
+	DesiredReplicas   int             `json:"desiredReplicas"`
+	RunningReplicas   int             `json:"runningReplicas"`
+	HealthyReplicas   int             `json:"healthyReplicas"`
+	UnhealthyReplicas int             `json:"unhealthyReplicas"`
+	UnknownReplicas   int             `json:"unknownReplicas"`
+	OverallStatus     string          `json:"overallStatus"`
+	Containers        []ReplicaStatus `json:"containers"`
 }
 
 // Builder computes service status from desired state + runtime state + health state.
 type Builder struct {
-	store *state.ServiceStore
+	store   *state.ServiceStore
 	manager *manager.ContainerManager
 	tracker *health.Tracker
 }
@@ -43,7 +43,7 @@ type Builder struct {
 // NewBuilder constructs a centralized service-status builder.
 func NewBuilder(store *state.ServiceStore, manager *manager.ContainerManager, tracker *health.Tracker) *Builder {
 	return &Builder{
-		store: store,
+		store:   store,
 		manager: manager,
 		tracker: tracker,
 	}
@@ -84,10 +84,10 @@ func (b *Builder) GetService(name string) (ServiceStatus, bool, error) {
 // buildServiceStatus creates the status view for one service from a shared container snapshot.
 func (b *Builder) buildServiceStatus(name, image string, desired int, containers []types.Container) ServiceStatus {
 	status := ServiceStatus{
-		Name: name,
-		Image: image,
+		Name:            name,
+		Image:           image,
 		DesiredReplicas: desired,
-		Containers: []ReplicaStatus{},
+		Containers:      []ReplicaStatus{},
 	}
 
 	for _, cont := range containers {
@@ -97,10 +97,10 @@ func (b *Builder) buildServiceStatus(name, image string, desired int, containers
 
 		containerName := strings.TrimPrefix(cont.Names[0], "/")
 		replica := ReplicaStatus{
-			ContainerID: cont.ID[:12],
+			ContainerID:   cont.ID[:12],
 			ContainerName: containerName,
 			RuntimeStatus: cont.Status,
-			HealthStatus: "unknown", // Default until the tracker gives an explicit health result.
+			HealthStatus:  "unknown", // Default until the tracker gives an explicit health result.
 		}
 
 		status.RunningReplicas++

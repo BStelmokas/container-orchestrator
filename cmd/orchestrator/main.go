@@ -72,7 +72,7 @@ func main() {
 		controller.ReconcileNow() // Trigger immediate convergence after desired-state mutation
 
 		c.JSON(http.StatusOK, gin.H{
-			"status": "service stored",
+			"status":  "service stored",
 			"service": req.Name,
 		})
 	})
@@ -160,8 +160,8 @@ func main() {
 		controller.ReconcileNow()
 
 		c.JSON(http.StatusOK, gin.H{
-			"service":  name,
-			"status":   "restart triggered",
+			"service": name,
+			"status":  "restart triggered",
 		})
 	})
 
@@ -197,13 +197,12 @@ func main() {
 
 		c.JSON(http.StatusOK, gin.H{
 			"service": name,
-			"status": "deleted",
+			"status":  "deleted",
 		})
 	})
 
-
-  /*
-	The REST API
+	/*
+		The REST API
 	*/
 
 	// POST /deploy
@@ -248,7 +247,7 @@ func main() {
 		controller.ReconcileNow()
 
 		c.JSON(http.StatusOK, gin.H{
-			"status": "scaled",
+			"status":   "scaled",
 			"replicas": updatedSpec.Replicas,
 		})
 	})
@@ -313,7 +312,6 @@ func matchesServiceName(containerDockerName, serviceName string) bool {
 	trimmed := strings.TrimPrefix(containerDockerName, "/")
 	return trimmed == serviceName || strings.HasPrefix(trimmed, serviceName+"-")
 }
-
 
 // filterNginxAccessLogs makes the logs less verbose.
 func filterNginxAccessLogs(raw string) string {

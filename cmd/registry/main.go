@@ -12,7 +12,7 @@ import (
 
 // RegistryStore models one logical service with many concrete instances.
 type RegistryStore struct {
-	mu sync.RWMutex
+	mu       sync.RWMutex
 	services map[string]map[string]registry.ServiceInstance
 }
 
@@ -34,9 +34,9 @@ func (r *RegistryStore) Register(serviceName, instanceID, ip string, port int) {
 
 	r.services[serviceName][instanceID] = registry.ServiceInstance{
 		ServiceName: serviceName,
-		InstanceID: instanceID,
-		IP: ip,
-		Port: port,
+		InstanceID:  instanceID,
+		IP:          ip,
+		Port:        port,
 	}
 }
 
@@ -108,9 +108,9 @@ func main() {
 	r.POST("/register", func(c *gin.Context) {
 		var req struct {
 			ServiceName string `json:"serviceName"`
-			InstanceID string `json:"instanceID"`
-			IP string `json:"ip"`
-			Port int `json:"port"`
+			InstanceID  string `json:"instanceID"`
+			IP          string `json:"ip"`
+			Port        int    `json:"port"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
@@ -133,7 +133,7 @@ func main() {
 	r.DELETE("/deregister", func(c *gin.Context) {
 		var req struct {
 			ServiceName string `json:"serviceName"`
-			InstanceID string `json:"instanceID"`
+			InstanceID  string `json:"instanceID"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})

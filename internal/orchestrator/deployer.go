@@ -17,11 +17,11 @@ import (
 // DeploymentController is responsible for reconciling desired service state with actual running containers.
 type DeploymentController struct {
 	manager     *manager.ContainerManager // handles container operations
-	store      *state.ServiceStore   			// desired state source of truth
-	tracker 		*health.Tracker
-	running     map[string][]string       // containerIDs currently running per service
-	mu          sync.Mutex                // protects access to specs and running maps
-	checkPeriod time.Duration             // how often to reconcile state
+	store       *state.ServiceStore       // desired state source of truth
+	tracker     *health.Tracker
+	running     map[string][]string // containerIDs currently running per service
+	mu          sync.Mutex          // protects access to specs and running maps
+	checkPeriod time.Duration       // how often to reconcile state
 }
 
 // NewDeploymentController creates a new deployment controller instance
@@ -29,7 +29,7 @@ func NewDeploymentController(m *manager.ContainerManager, store *state.ServiceSt
 	return &DeploymentController{
 		manager:     m,
 		store:       store,
-		tracker: tracker,
+		tracker:     tracker,
 		running:     make(map[string][]string),
 		checkPeriod: checkPeriod,
 	}

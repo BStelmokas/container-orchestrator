@@ -9,7 +9,7 @@ import (
 
 // ServiceStore is the control-plane source of truth for desired service state.
 type ServiceStore struct {
-	mu sync.RWMutex
+	mu       sync.RWMutex
 	services map[string]domain.ServiceSpec
 }
 

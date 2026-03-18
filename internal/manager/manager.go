@@ -24,7 +24,7 @@ import (
 type ContainerManager struct {
 	cli      *client.Client
 	registry *registry.Client
-	tracker *health.Tracker
+	tracker  *health.Tracker
 }
 
 // NewContainerManager creates a new Docker client using environment configuration.
@@ -43,7 +43,7 @@ func NewContainerManager() (*ContainerManager, error) {
 	return &ContainerManager{
 		cli:      cli,
 		registry: reg,
-		tracker: nil,
+		tracker:  nil,
 	}, nil
 }
 
@@ -102,7 +102,7 @@ func (m *ContainerManager) StartContainer(serviceName, imageName, containerName 
 	}
 
 	/*
-	Inspect container to extract the actual host-mapped port
+		Inspect container to extract the actual host-mapped port
 	*/
 
 	// Retry ContainerInspect to give Docker time to assign ports
@@ -260,7 +260,6 @@ func (m *ContainerManager) ListRunningContainers() ([]types.Container, error) {
 
 	return containers, nil
 }
-
 
 // StartHealthMonitor starts a background goroutine that checks the health of a container's HTTP endpoint
 // every 30 seconds. If the check fails, the container is restarted.
