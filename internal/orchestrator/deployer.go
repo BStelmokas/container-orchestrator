@@ -75,7 +75,7 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 
 	for _, c := range containers {
 		// Docker container names start with "/" - check for name prefix
-		if len(c.Names) == 0 || matchesServiceContainerName(c.Names[0], spec.Name) {
+		if len(c.Names) == 0 || !matchesServiceContainerName(c.Names[0], spec.Name) {
 			continue
 		}
 
