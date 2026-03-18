@@ -306,6 +306,7 @@ func main() {
 		serviceStatus, found, err := statusBuilder.GetService(name)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build service status"})
+			return
 		}
 		if !found {
 			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})

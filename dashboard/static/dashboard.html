@@ -75,7 +75,12 @@
           html += "<div>";
 
           for (const c of service.containers) {
-            html += `<div class="container">${c}</div>`;
+            html += `
+              <div class="container">
+                ${c.containerName} (${c.containerID}) -  ${c.runtimeStatus}
+                <span class="container-health">health: ${c.healthStatus}</span>
+                ${c.lastError ? `<span class="container-error">reason: ${c.lastError}</span>` : ""}
+              </div>`;
           }
 
           html += `</div>`;
