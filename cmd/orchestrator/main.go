@@ -191,7 +191,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"service": name,
 			"generation": updatedSpec.Generation,
-			"status":  "restart triggered",
+			"status":  "rolling restart requested",
 		})
 	})
 
