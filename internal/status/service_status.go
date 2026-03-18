@@ -2,6 +2,7 @@ package status
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"orchestrator/internal/health"
@@ -18,6 +19,8 @@ type ReplicaStatus struct {
 	RuntimeStatus string `json:"runtimeStatus"`
 	HealthStatus  string `json:"healthStatus"`
 	LastError     string `json:"lastError,omitempty"`
+	Generation    int64  `json:"generation"`
+	Outdated    	bool   `json:"outdated"`
 }
 
 // ServiceStatus is the centralized status view exposed to the API and dashboard.
@@ -31,7 +34,8 @@ type ServiceStatus struct {
 	UnknownReplicas   int             `json:"unknownReplicas"`
 	OverallStatus     string          `json:"overallStatus"`
 	Containers        []ReplicaStatus `json:"containers"`
-	Generation        int64 `json:"generation"`
+	Generation        int64 					`json:"generation"`
+	OutdatedReplicas  int							`json:"outdatedReplicas"`
 }
 
 // Builder computes service status from desired state + runtime state + health state.
@@ -98,14 +102,28 @@ func (b *Builder) buildServiceStatus(name, image string, desired int, generation
 		}
 
 		containerName := strings.TrimPrefix(cont.Names[0], "/")
+
+		/*
+		Read the replica generation from Docker labels so status can detect whether a rolling restart is still in progress.
+		*/
+		replicaGeneration := containerGeneration(cont)
+		isOutdated := replicaGeneration != generation
+
 		replica := ReplicaStatus{
 			ContainerID:   cont.ID[:12],
 			ContainerName: containerName,
 			RuntimeStatus: cont.Status,
 			HealthStatus:  "unknown", // Default until the tracker gives an explicit health result.
+			Generation: replicaGeneration,
+			Outdated: isOutdated,
 		}
 
 		status.RunningReplicas++
+
+		// Track rollout lag separately from health state.
+		if isOutdated {
+			status.OutdatedReplicas++
+		}
 
 		report, found := b.tracker.Get(cont.ID)
 		if found && report.HasCheck {
@@ -126,6 +144,8 @@ func (b *Builder) buildServiceStatus(name, image string, desired int, generation
 
 	// Derive one clear overall status for the service.
 	switch {
+	case status.OutdatedReplicas > 0:
+		status.OverallStatus = "rolling"
 	case status.RunningReplicas < status.DesiredReplicas:
 		status.OverallStatus = "progressing"
 	case status.UnhealthyReplicas > 0:
@@ -145,10 +165,29 @@ func matchesServiceName(containerDockerName, serviceName string) bool {
 	return trimmed == serviceName || strings.HasPrefix(trimmed, serviceName+"-")
 }
 
+// containerGeneration reads the generation label attached at container creation time.
+func containerGeneration(c types.Container) int64 {
+	if c.Labels == nil {
+		return 0
+	}
+
+	raw := c.Labels["orchestrator.generation"]
+	if raw == "" {
+		return 0
+	}
+
+	generation, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0
+	}
+
+	return generation
+}
+
 // FormatServiceSummary is a small helper for logs, future UI use.
 func FormatServiceSummary(s ServiceStatus) string {
 	return fmt.Sprintf(
-		"%s image=%s desired=%d running=%d healthy=%d unhealthy=%d unknown=%d generation=%d status=%s",
+		"%s image=%s desired=%d running=%d healthy=%d unhealthy=%d unknown=%d outdated=%d generation=%d status=%s",
 		s.Name,
 		s.Image,
 		s.DesiredReplicas,
@@ -156,6 +195,7 @@ func FormatServiceSummary(s ServiceStatus) string {
 		s.HealthyReplicas,
 		s.UnhealthyReplicas,
 		s.UnknownReplicas,
+		s.OutdatedReplicas,
 		s.Generation,
 		s.OverallStatus,
 	)
