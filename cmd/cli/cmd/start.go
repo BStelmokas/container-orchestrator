@@ -25,7 +25,7 @@ var startCmd = &cobra.Command{
 
 		fmt.Println("Starting container...")
 
-		id, err := mgr.StartContainer(containerName, imageName, containerName)
+		id, err := mgr.StartContainer(containerName, imageName, containerName, 1)
 		if err != nil {
 			log.Fatalf("Failed to start container: %v", err)
 		}
