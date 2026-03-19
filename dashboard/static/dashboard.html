@@ -6,23 +6,89 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
       body {
-        font-family: sans-serif;
-        padding: 2rem;
-        background: #f5f5f5;
+        font-family: Arial, sans-serif;
+        margin: 2rem;
+        background: #f9fafb;
+        color: #111827;
       }
+
       h1 {
-        color: #333;
+        margin-bottom: 1.5rem;
       }
-      .service-card {
+
+      .layout {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 1.5rem;
+        align-items: start;
+      }
+
+      .service-card,
+      .events-card {
         background: white;
+        border: 1px solid #e5e7eb;
         border-radius: 8px;
         padding: 1rem;
         margin-bottom: 1rem;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
+
+      .service-meta {
+        margin-bottom: 0.75rem;
+        color: #374151;
+        font-size: 0.95rem;
+      }
+
+      .service-status {
+        display: inline-block;
+        margin-top: 0.5rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        background: #e5e7eb;
+      }
+
       .container {
         margin: 0.3rem 0;
       }
+
+      .container-health {
+        margin-left: 0.5rem;
+        color: #6b7280;
+        font-size: 0.9rem;
+      }
+
+      .container-error {
+        display: block;
+        margin-left: 1rem;
+        color: #b91c1c;
+        font-size: 0.85rem;
+      }
+
+      .event {
+        padding: 0.6rem 0;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 0.92rem;
+      }
+
+      .event:last-child {
+        border-bottom: none;
+      }
+
+      .event-time {
+        color: #6b7280;
+        font-size: 0.82rem;
+      }
+
+      .event-category {
+        display: inline-blcok;
+        margin-right: 0.5rem;
+        padding: 0.1rem 0.45rem;
+        border-radius: 999px;
+        background: #eef2ff;
+        font-size: 0.75rem;
+      }
+
       button {
         margin-right: 0.5rem;
       }
@@ -30,6 +96,7 @@
   </head>
   <body>
     <h1>Container Orchestration Dashboard</h1>
+
     <div class="layout">
       <div>
         <div id="services"></div>
@@ -65,10 +132,8 @@
               <div><strong>Healthy Replicas:</strong> ${service.healthyReplicas}</div>
               <div><strong>Unhealthy Replicas:</strong> ${service.unhealthyReplicas}</div>
               <div><strong>Unknown Replicas:</strong> ${service.unknownReplicas}</div>
-
               <div><strong>Generation:</strong> ${service.generation ?? "n/a"}</div>
-
-              <div class="service-status"><strong>Status:</strong></div> ${service.overallStatus}
+              <div class="service-status"><strong>Status:</strong> ${service.overallStatus}</div>
             </div>
           `;
 
@@ -85,14 +150,22 @@
 
           html += `</div>`;
           html += `
-                        <button onclick="scale('${service.name}', 1)">Scale Up</button>
-                        <button onclick="scale('${service.name}', -1)">Scale Down</button>
-                        <button onclick="restart('${service.name}')">Restart</button>
-                        <button onclick="deleteService('${service.name}')">Delete</button>
-                    `;
+            <button onclick="scaleTo(service.name, service.desiredReplicas + 1)">Scale Up</button>
+            <button onclick="scaleTo(service.name, Math.max(1, service.desiredReplicas - 1))">Scale Down</button>
+            <button onclick="restartService(service.name)">Restart</button>
+            <button onclick="deleteService(service.name)">Delete</button>
+          `;
 
           div.innerHTML = html;
           container.appendChild(div);
+
+          const buttons = div.querySelectorAll("button");
+          buttons[0].onClick = () =>
+            scaleTo(service.name, service.desiredReplicas + 1);
+          buttons[1].onClick = () =>
+            scaleTo(service.name, Math.max(1, service.desiredReplicas - 1));
+          buttons[2].onClick = () => restartService(service.name);
+          buttons[3].onClick = () => deleteService(service.name);
         }
       }
 
@@ -119,24 +192,32 @@
         }
       }
 
-      // POST to /api/scale/:name/:delta
-      async function scale(name, delta) {
-        await fetch("/api/scale/" + name + "/" + delta, {
+      // Canonical scale route.
+      async function scaleTo(name, replicas) {
+        await fetch("/api/services/" + encodeURIComponent(name) + "/scale", {
           method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ replicas }),
         });
+
         loadServices();
         loadEvents();
       }
 
-      // POST to /api/restart/:name
-      async function restart(name) {
-        await fetch("/api/restart/" + name, { method: "POST" });
+      // Canonical rolling restart route.
+      async function restartService(name) {
+        await fetch("/api/services/" + encodeURIComponent(name) + "/restart", {
+          method: "POST",
+        });
+
         loadServices();
         loadEvents();
       }
 
       async function deleteService(name) {
-        await fetch("/api/services/" + name, {
+        await fetch("/api/services/" + encodeURIComponent(name), {
           method: "DELETE",
         });
 
@@ -144,7 +225,6 @@
         loadEvents();
       }
 
-      // Refresh services every 10s
       loadServices();
       loadEvents();
 

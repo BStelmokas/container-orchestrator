@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +20,11 @@ import (
 
 // Persist desired services in a stable local file.
 const desiredStateFilePath = "data/services.json"
+
+// scaleServiceRequest is the canonical request payload for service scaling.
+type scaleServiceRequest struct {
+	Replicas int `json:"replicas"`
+}
 
 func main() {
 	// Initialize the Docker-based container manager.
@@ -66,7 +70,7 @@ func main() {
 	// Serve Static HTML Dashboard.
 	r.StaticFile("/", "./dashboard/static/dashboard.html")
 
-	// /api/services
+	// GET /api/services
 	r.GET("/api/services", func(c *gin.Context) {
 		services, err := statusBuilder.ListServices()
 		if err != nil {
@@ -77,15 +81,31 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"services": services})
 	})
 
-	// Expose control-plane events to the dashboard and operators.
+	// GET /api/services/:name
+	r.GET("/api/services/:name", func(c *gin.Context) {
+		name := c.Param("name")
+
+		serviceStatus, found, err := statusBuilder.GetService(name)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build service status"})
+			return
+		}
+		if !found {
+			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
+			return
+		}
+
+		c.JSON(http.StatusOK, serviceStatus)
+	})
+
+	// GET /api/events
 	r.GET("/api/events", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"events": eventRecorder.List(50),
 		})
 	})
 
-
-	// Service-centric create/update endpoint.
+	// POST /api/services
 	r.POST("/api/services", func(c *gin.Context) {
 		var req domain.ServiceSpec
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -118,31 +138,22 @@ func main() {
 		})
 	})
 
-	// /api/scale/:name/:delta
-	r.POST("/api/scale/:name/:delta", func(c *gin.Context) {
+	// POST /api/services/:name/scale
+	r.POST("/api/services/:name/scale", func(c *gin.Context) {
 		name := c.Param("name")
-		deltaStr := c.Param("delta")
 
-		// Convert delta from string to integer
-		delta, err := strconv.Atoi(deltaStr)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid scale delta"})
+		var req scaleServiceRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
 			return
 		}
 
-		spec, found := serviceStore.Get(name)
-		if !found {
-			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
+		if req.Replicas < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "replicas must be at least 1"})
 			return
 		}
 
-		// Compute new desired replica count.
-		newReplicas := spec.Replicas + delta
-		if newReplicas < 1 {
-			newReplicas = 1 // Always keep at least one replica running
-		}
-
-		updatedSpec, found, err := serviceStore.Scale(name, newReplicas)
+		updatedSpec, found, err := serviceStore.Scale(name, req.Replicas)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -152,23 +163,27 @@ func main() {
 			return
 		}
 
-		// Persist scale changes so desired replica count survives restarts.
 		if err := serviceStore.SaveToFile(desiredStateFilePath); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
 			return
 		}
 
+		eventRecorder.Add(
+			"api",
+			fmt.Sprintf("scaled service=%s replicas=%d", name, updatedSpec.Replicas),
+		)
+
 		controller.ReconcileNow()
 
 		c.JSON(http.StatusOK, gin.H{
-			"service":  name,
+			"service": name,
 			"replicas": updatedSpec.Replicas,
-			"status":   "scaled successfully",
+			"status": "scaled successfully",
 		})
 	})
 
-	// /api/restart/:name
-	r.POST("/api/restart/:name", func(c *gin.Context) {
+	// POST /api/services/:name/restart
+	r.POST("/api/services/:name/restart", func(c *gin.Context) {
 		name := c.Param("name")
 
 		updatedSpec, found, err := serviceStore.RequestRestart(name)
@@ -186,16 +201,21 @@ func main() {
 			return
 		}
 
+		eventRecorder.Add(
+			"api",
+			fmt.Sprintf("requested rolling restart for service=%s generation=%d", name, updatedSpec.Generation),
+		)
+
 		controller.ReconcileNow()
 
 		c.JSON(http.StatusOK, gin.H{
-			"service": name,
+			"service": 		name,
 			"generation": updatedSpec.Generation,
-			"status":  "rolling restart requested",
+			"status": 		"rolling restart requested",
 		})
 	})
 
-	//Service delete endpoint that removes desired state and stops live replicas.
+	// DELETE /api/services/:name
 	r.DELETE("/api/services/:name", func(c *gin.Context) {
 		name := c.Param("name")
 
@@ -209,6 +229,8 @@ func main() {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
 			return
 		}
+
+		eventRecorder.Add("api", fmt.Sprintf("deleted service=%s", name))
 
 		containers, err := manager.ListRunningContainers()
 		if err != nil {
@@ -237,87 +259,8 @@ func main() {
 		})
 	})
 
-	/*
-		The REST API
-	*/
-
-	// POST /deploy
-	r.POST("/deploy", func(c *gin.Context) {
-		var req domain.ServiceSpec
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
-			return
-		}
-
-		if err := serviceStore.Upsert(req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Persist the legacy deploy endpoint too, so all write paths stay consistent.
-		if err := serviceStore.SaveToFile(desiredStateFilePath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
-			return
-		}
-
-		controller.ReconcileNow()
-
-		c.JSON(http.StatusOK, gin.H{"status": "deployment stored", "service": req.Name})
-	})
-
-	// POST /scale/:name/:replicas
-	r.POST("/scale/:name/:replicas", func(c *gin.Context) {
-		name := c.Param("name")
-		replicas := c.Param("replicas")
-
-		n, err := strconv.Atoi(replicas)
-		if err != nil || n < 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid replica count"})
-			return
-		}
-
-		updatedSpec, found, err := serviceStore.Scale(name, n)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		if !found {
-			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
-			return
-		}
-
-		if err := serviceStore.SaveToFile(desiredStateFilePath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist desired state"})
-			return
-		}
-
-		controller.ReconcileNow()
-
-		c.JSON(http.StatusOK, gin.H{
-			"status":   "scaled",
-			"replicas": updatedSpec.Replicas,
-		})
-	})
-
-	// GET /status/:name
-	r.GET("/status/:name", func(c *gin.Context) {
-		name := c.Param("name")
-
-		serviceStatus, found, err := statusBuilder.GetService(name)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build service status"})
-			return
-		}
-		if !found {
-			c.JSON(http.StatusNotFound, gin.H{"error": "unknown service: " + name})
-			return
-		}
-
-		c.JSON(http.StatusOK, serviceStatus)
-	})
-
-	// GET /logs/:name
-	r.GET("/logs/:name", func(c *gin.Context) {
+	// GET /api/services/:name/logs
+	r.GET("/api/services/:name/logs", func(c *gin.Context) {
 		name := c.Param("name")
 
 		if _, found := serviceStore.Get(name); !found {
