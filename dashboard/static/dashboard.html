@@ -139,6 +139,7 @@
               <div><strong>Healthy Replicas:</strong> ${service.healthyReplicas}</div>
               <div><strong>Unhealthy Replicas:</strong> ${service.unhealthyReplicas}</div>
               <div><strong>Unknown Replicas:</strong> ${service.unknownReplicas}</div>
+              <div><strong>Outdated Replicas:</strong> ${service.outdatedReplicas}</div>
               <div><strong>Generation:</strong> ${service.generation ?? "n/a"}</div>
               <div class="service-status"><strong>Status:</strong> ${service.overallStatus}</div>
             </div>
@@ -158,10 +159,10 @@
 
           html += `</div>`;
           html += `
-            <button onclick="scaleTo(service.name, service.desiredReplicas + 1)">Scale Up</button>
-            <button onclick="scaleTo(service.name, Math.max(1, service.desiredReplicas - 1))">Scale Down</button>
-            <button onclick="restartService(service.name)">Restart</button>
-            <button onclick="deleteService(service.name)">Delete</button>
+            <button>Scale Up</button>
+            <button>Scale Down</button>
+            <button>Restart</button>
+            <button>Delete</button>
           `;
 
           div.innerHTML = html;
