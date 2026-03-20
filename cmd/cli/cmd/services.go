@@ -9,21 +9,21 @@ import (
 // servicesResponse mirrors the canonical GET /api/services response shape.
 type serviceResponse struct {
 	Services []struct {
-		Name string `json:"name"`
-		Image string `json:"image"`
-		DesiredReplicas int `json:"desiredReplicas"`
-		RunningReplicas int `json:"runningReplicas"`
-		HealthyReplicas int `json:"healthyReplicas"`
-		UnhealthyReplicas int `json:"unhealthyReplicas"`
-		UnknownReplicas int `json:"unknownReplicas"`
-		OutdatedReplicas int `json:"outdatedReplicas"`
-		Generation int64 `json:"generation"`
-		OverallStatus string `json:"overallSatus"`
+		Name              string `json:"name"`
+		Image             string `json:"image"`
+		DesiredReplicas   int    `json:"desiredReplicas"`
+		RunningReplicas   int    `json:"runningReplicas"`
+		HealthyReplicas   int    `json:"healthyReplicas"`
+		UnhealthyReplicas int    `json:"unhealthyReplicas"`
+		UnknownReplicas   int    `json:"unknownReplicas"`
+		OutdatedReplicas  int    `json:"outdatedReplicas"`
+		Generation        int64  `json:"generation"`
+		OverallStatus     string `json:"overallSatus"`
 	} `json:"services"`
 }
 
 var servicesCmd = &cobra.Command{
-	Use: "services",
+	Use:   "services",
 	Short: "List all services",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var resp serviceResponse

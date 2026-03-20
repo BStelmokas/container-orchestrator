@@ -7,9 +7,9 @@ import (
 )
 
 var deleteCmd = &cobra.Command{
-	Use: "delete SERVICE_NAME",
+	Use:   "delete SERVICE_NAME",
 	Short: "Delete a service and stop its running replicas",
-	Args: cobra.ExactArgs(1),
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serviceName := args[0]
 

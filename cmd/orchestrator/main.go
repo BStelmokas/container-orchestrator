@@ -47,7 +47,6 @@ func main() {
 	// Create a centralized event recorder for recent control-plane activity.
 	eventRecorder := events.NewRecorder(200)
 
-
 	// Inject the health tracker into the runtime layer.
 	manager.SetHealthTracker(healthTracker)
 	manager.SetEventRecorder(eventRecorder)
@@ -176,9 +175,9 @@ func main() {
 		controller.ReconcileNow()
 
 		c.JSON(http.StatusOK, gin.H{
-			"service": name,
+			"service":  name,
 			"replicas": updatedSpec.Replicas,
-			"status": "scaled successfully",
+			"status":   "scaled successfully",
 		})
 	})
 
@@ -209,9 +208,9 @@ func main() {
 		controller.ReconcileNow()
 
 		c.JSON(http.StatusOK, gin.H{
-			"service": 		name,
+			"service":    name,
 			"generation": updatedSpec.Generation,
-			"status": 		"rolling restart requested",
+			"status":     "rolling restart requested",
 		})
 	})
 

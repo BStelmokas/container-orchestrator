@@ -8,9 +8,9 @@ import (
 )
 
 var getCmd = &cobra.Command{
-	Use: "get SERVICE_NAME",
+	Use:   "get SERVICE_NAME",
 	Short: "Get one service with full status",
-	Args: cobra.ExactArgs(1),
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serviceName := args[0]
 

@@ -96,8 +96,8 @@ func (m *ContainerManager) StartContainer(serviceName, imageName, containerName 
 	}
 
 	// Write orchestrator metadata into Docker labels.
-	labels := map [string]string {
-		"orchestrator.service": serviceName,
+	labels := map[string]string{
+		"orchestrator.service":    serviceName,
 		"orchestrator.generation": strconv.FormatInt(generation, 10),
 	}
 
@@ -105,7 +105,7 @@ func (m *ContainerManager) StartContainer(serviceName, imageName, containerName 
 	resp, err := m.cli.ContainerCreate(ctx, &container.Config{
 		Image:        imageName,
 		ExposedPorts: exposedPorts, // So Docker knows port 80 is in use
-		Labels: labels,
+		Labels:       labels,
 	}, hostConfig, nil, nil, containerName)
 	if err != nil {
 		return "", fmt.Errorf("failed to create container: %w", err)

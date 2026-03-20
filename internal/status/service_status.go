@@ -20,7 +20,7 @@ type ReplicaStatus struct {
 	HealthStatus  string `json:"healthStatus"`
 	LastError     string `json:"lastError,omitempty"`
 	Generation    int64  `json:"generation"`
-	Outdated    	bool   `json:"outdated"`
+	Outdated      bool   `json:"outdated"`
 }
 
 // ServiceStatus is the centralized status view exposed to the API and dashboard.
@@ -34,8 +34,8 @@ type ServiceStatus struct {
 	UnknownReplicas   int             `json:"unknownReplicas"`
 	OverallStatus     string          `json:"overallStatus"`
 	Containers        []ReplicaStatus `json:"containers"`
-	Generation        int64 					`json:"generation"`
-	OutdatedReplicas  int							`json:"outdatedReplicas"`
+	Generation        int64           `json:"generation"`
+	OutdatedReplicas  int             `json:"outdatedReplicas"`
 }
 
 // Builder computes service status from desired state + runtime state + health state.
@@ -92,7 +92,7 @@ func (b *Builder) buildServiceStatus(name, image string, desired int, generation
 		Name:            name,
 		Image:           image,
 		DesiredReplicas: desired,
-		Generation: generation,
+		Generation:      generation,
 		Containers:      []ReplicaStatus{},
 	}
 
@@ -104,7 +104,7 @@ func (b *Builder) buildServiceStatus(name, image string, desired int, generation
 		containerName := strings.TrimPrefix(cont.Names[0], "/")
 
 		/*
-		Read the replica generation from Docker labels so status can detect whether a rolling restart is still in progress.
+			Read the replica generation from Docker labels so status can detect whether a rolling restart is still in progress.
 		*/
 		replicaGeneration := containerGeneration(cont)
 		isOutdated := replicaGeneration != generation
@@ -114,8 +114,8 @@ func (b *Builder) buildServiceStatus(name, image string, desired int, generation
 			ContainerName: containerName,
 			RuntimeStatus: cont.Status,
 			HealthStatus:  "unknown", // Default until the tracker gives an explicit health result.
-			Generation: replicaGeneration,
-			Outdated: isOutdated,
+			Generation:    replicaGeneration,
+			Outdated:      isOutdated,
 		}
 
 		status.RunningReplicas++

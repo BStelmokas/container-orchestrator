@@ -18,16 +18,16 @@ func TestBuildServiceStatusDetectsRollingReplicas(t *testing.T) {
 
 	containers := []types.Container{
 		{
-			ID: "aaaaaaaaaaaa111111111111",
-			Names: []string{"/web-old"},
+			ID:     "aaaaaaaaaaaa111111111111",
+			Names:  []string{"/web-old"},
 			Status: "Up 10 seconds",
 			Labels: map[string]string{
 				"orchestrator.generation": "1",
 			},
 		},
 		{
-			ID: "bbbbbbbbbbbb222222222222",
-			Names: []string{"/web-new"},
+			ID:     "bbbbbbbbbbbb222222222222",
+			Names:  []string{"/web-new"},
 			Status: "Up 10 seconds",
 			Labels: map[string]string{
 				"orchestrator.generation": "2",

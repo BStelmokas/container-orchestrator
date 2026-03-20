@@ -24,7 +24,7 @@ type DeploymentController struct {
 	manager     *manager.ContainerManager // handles container operations
 	store       *state.ServiceStore       // desired state source of truth
 	tracker     *health.Tracker
-	recorder 		*events.Recorder
+	recorder    *events.Recorder
 	running     map[string][]string // containerIDs currently running per service
 	mu          sync.Mutex          // protects access to specs and running maps
 	checkPeriod time.Duration       // how often to reconcile state
@@ -37,12 +37,12 @@ func NewDeploymentController(
 	tracker *health.Tracker,
 	recorder *events.Recorder,
 	checkPeriod time.Duration,
-	) *DeploymentController {
+) *DeploymentController {
 	return &DeploymentController{
 		manager:     m,
 		store:       store,
 		tracker:     tracker,
-		recorder: recorder,
+		recorder:    recorder,
 		running:     make(map[string][]string),
 		checkPeriod: checkPeriod,
 	}
@@ -118,8 +118,8 @@ func (d *DeploymentController) reconcileService(spec domain.ServiceSpec) {
 
 		if d.recorder != nil {
 			d.recorder.Add(
-			"reconcile",
-			fmt.Sprintf("replacing unhealthy replica %s for service=%s", containerID[:12], spec.Name),
+				"reconcile",
+				fmt.Sprintf("replacing unhealthy replica %s for service=%s", containerID[:12], spec.Name),
 			)
 		}
 

@@ -43,7 +43,6 @@ func (s *ServiceStore) Upsert(spec domain.ServiceSpec) error {
 		return err
 	}
 
-
 	s.services[spec.Name] = spec // Desired state is keyed by logical service name
 	return nil
 }

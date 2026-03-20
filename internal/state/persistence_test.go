@@ -12,9 +12,9 @@ func TestServiceStoreSaveAndLoadRoundTrip(t *testing.T) {
 	store := NewServiceStore()
 
 	err := store.Upsert(domain.ServiceSpec{
-		Name: "web",
-		Image: "nginx:latest",
-		Replicas: 3,
+		Name:       "web",
+		Image:      "nginx:latest",
+		Replicas:   3,
 		Generation: 2,
 	})
 	if err != nil {

@@ -8,24 +8,24 @@ import (
 
 // deployRequest matches the canonical POST /api/services payload.
 type deployRequest struct {
-	Name 		 string `json:"name"`
-	Image 	 string `json:"image"`
-	Replicas int 		`json:"replicas"`
+	Name     string `json:"name"`
+	Image    string `json:"image"`
+	Replicas int    `json:"replicas"`
 }
 
 var (
-	deployName		 string
-	deployImage 	 string
+	deployName     string
+	deployImage    string
 	deployReplicas int
 )
 
 var deployCmd = &cobra.Command{
-	Use: "deploy",
+	Use:   "deploy",
 	Short: "Create or update a service",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		req := deployRequest{
-			Name: deployName,
-			Image: deployImage,
+			Name:     deployName,
+			Image:    deployImage,
 			Replicas: deployReplicas,
 		}
 

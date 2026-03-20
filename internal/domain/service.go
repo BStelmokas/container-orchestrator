@@ -6,9 +6,9 @@ import (
 )
 
 type ServiceSpec struct {
-	Name     string
-	Image    string
-	Replicas int
+	Name       string
+	Image      string
+	Replicas   int
 	Generation int64
 }
 

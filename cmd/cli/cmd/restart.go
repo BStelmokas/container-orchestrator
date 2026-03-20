@@ -7,9 +7,9 @@ import (
 )
 
 var restartCmd = &cobra.Command{
-	Use: "restart SERVICE_NAME",
+	Use:   "restart SERVICE_NAME",
 	Short: "Request a rolling restart for a service",
-	Args: cobra.ExactArgs(1),
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		serviceName := args[0]
 

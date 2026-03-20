@@ -7,15 +7,15 @@ import (
 
 // Event is one human-readable control-plane record.
 type Event struct {
-	Time time.Time `json:"time"`
-	Category string `json:"category"`
-	Message string `json:"message"`
+	Time     time.Time `json:"time"`
+	Category string    `json:"category"`
+	Message  string    `json:"message"`
 }
 
 // Recorder stores a bounded in-memory event history.
 type Recorder struct {
-	mu sync.RWMutex
-	events []Event
+	mu      sync.RWMutex
+	events  []Event
 	maxSize int
 }
 
@@ -26,7 +26,7 @@ func NewRecorder(maxSize int) *Recorder {
 	}
 
 	return &Recorder{
-		events: make([]Event, 0, maxSize),
+		events:  make([]Event, 0, maxSize),
 		maxSize: maxSize,
 	}
 }
@@ -37,9 +37,9 @@ func (r *Recorder) Add(category, message string) {
 	defer r.mu.Unlock()
 
 	r.events = append(r.events, Event{
-		Time: time.Now(),
+		Time:     time.Now(),
 		Category: category,
-		Message: message,
+		Message:  message,
 	})
 
 	if len(r.events) > r.maxSize {
