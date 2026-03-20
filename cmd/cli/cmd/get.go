@@ -19,7 +19,7 @@ var getCmd = &cobra.Command{
 			return err
 		}
 
-		pretty, err := json.MarshalIndent(resp, "", " ")
+		pretty, err := json.MarshalIndent(resp, "", "  ")
 		if err != nil {
 			return err
 		}

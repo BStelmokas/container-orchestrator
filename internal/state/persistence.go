@@ -33,7 +33,7 @@ func (s *ServiceStore) SaveToFile(path string) error {
 		state.Services = append(state.Services, s.services[name])
 	}
 
-	data, err := json.MarshalIndent(state, "", " ")
+	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
 	}
