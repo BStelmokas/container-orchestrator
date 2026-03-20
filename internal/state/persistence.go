@@ -70,11 +70,6 @@ func (s *ServiceStore) LoadFromFile(path string) error {
 	for _, spec := range state.Services {
 		spec = spec.Normalize()
 
-		// // Backfill generation.
-		if spec.Generation < 1 {
-			spec.Generation = 1
-		}
-
 		if err := spec.Validate(); err != nil {
 			continue
 		}
