@@ -42,7 +42,7 @@ var deployCmd = &cobra.Command{
 func init() {
 	deployCmd.Flags().StringVar(&deployName, "name", "", "Logical service name (required)")
 	deployCmd.Flags().StringVar(&deployImage, "image", "", "Docker image to deploy (required)")
-	deployCmd.Flags().IntVar(&deployReplicas, "Replicas", 1, "Desired number of replicas")
+	deployCmd.Flags().IntVar(&deployReplicas, "replicas", 1, "Desired number of replicas")
 
 	_ = deployCmd.MarkFlagRequired("name")
 	_ = deployCmd.MarkFlagRequired("image")

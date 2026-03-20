@@ -1,0 +1,10 @@
+{
+  "services": [
+    {
+      "Name": "web",
+      "Image": "nginx:latest",
+      "Replicas": 2,
+      "Generation": 1
+    }
+  ]
+}
