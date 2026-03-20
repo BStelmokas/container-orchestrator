@@ -1,275 +1,578 @@
-# Container Orchestration Platform
+# Container Orchestrator
 
-A lightweight, modular container orchestration platform built from scratch - a mini Kubernetes - tailored for learning and experimentation.
+A small but real container orchestration platform written in Go.
 
-The platform supports container management, service discovery, load balancing, health monitoring, scaling, desired-state reconciliation, and a REST API.
+This project implements the core control-plane ideas behind container orchestration systems in a compact, understandable codebase. It manages containerized services through a service-oriented API, maintains desired state, reconciles runtime state, observes health centrally, performs rolling restarts, persists service definitions, registers live replicas for discovery, and routes traffic across service backends through a load balancer.
 
-# What It Does
+The platform lets an operator declare what services should be running, and continuously reconciles the system toward that state.
 
-This system automatically runs and manages containerized services. It can:
+The system is intentionally single-node and small in scope, but the architecture is real:
 
-- Start and stop Docker containers
-- Monitor container health and restart containers when needed
-- Register services for discovery and routing
-- Load balance HTTP traffic across healthy containers
-- Deploy and manage multiple replicas of services
-- Store desired service state and reconcile actual runtime state toward it
-- Interact via a REST API or CLI or web dashboard
+- **desired state**
+- **reconciliation**
+- **service identity**
+- **service discovery**
+- **centralized health observation**
+- **generation-based rolling restart**
+- **operator visibility through status, events, dashboard, and CLI**
 
-# Technologies Used
+---
+
+## Try it in 60 seconds
+
+Prerequisites:
+
+- [Go](https://go.dev/) installed
+- [Docker](https://www.docker.com/) installed and running
+
+Clone the repository:
+
+```bash
+git clone https://github.com/BStelmokas/container-orchestrator
+cd container-orchestrator
+```
+
+Start components (in separate terminals):
+
+```bash
+go run ./cmd/registry
+go run ./cmd/loadbalancer
+go run ./cmd/orchestrator
+```
+
+Then, in a fourth terminal, use the CLI:
+
+```bash
+go run ./cmd/cli deploy --name web --image nginx:latest --replicas 2
+go run ./cmd/cli services
+go run ./cmd/cli get web
+go run ./cmd/cli scale web --replicas 4
+go run ./cmd/cli restart web
+go run ./cmd/cli events
+go run ./cmd/cli delete web
+```
+
+Open the dashboard:
+
+```
+http://localhost:8080
+```
+
+This demonstrates the control-plane lifecycle: deploy → reconcile → scale → rolling restart → observe.
+
+---
+
+## Core capabilities
+
+- Create and update services through a canonical HTTP API
+- Persist desired service state to disk
+- Reconcile running containers toward desired state
+- Register multiple live replicas under one logical service
+- Route traffic across replicas with round-robin load balancing
+- Track container health centrally
+- Replace unhealthy replicas through reconciliation
+- Perform rolling restarts using service generations
+- Expose service status, logs, and control-plane events
+- Operate the platform through both a web dashboard and a CLI
+
+---
+
+## Architecture
+
+### High-level flow
 
 ```text
-Core Language: Go 1.24
-Container Runtime: Docker SDK v20.10 / API v1.41 compatibility
-CLI Tooling: Cobra
-Web Server: Gin
-Networking: Native HTTP + Reverse Proxy
-Project Layout: Modular Go structure
+                +----------------------+
+                |   Orchestrator API   |
+                +----------+-----------+
+                           |
+                           v
+                +----------------------+
+                |  Desired State Store |
+                +----------+-----------+
+                           |
+                           v
+                +----------------------+
+                |  Reconciliation Loop |
+                +----+-------------+---+
+                     |             |
+                     |             |
+                     v             v
+          +----------------+   +----------------+
+          | Container      |   | Health Tracker |
+          | Manager        |   |                |
+          +-------+--------+   +--------+-------+
+                  |                     |
+                  |                     |
+                  v                     |
+          +----------------+            |
+          | Running        |------------+
+          | Containers     |  Health Observations
+          +-------+--------+
+                  |
+                  v
+          +----------------+
+          | Service        |
+          | Registry       |
+          +-------+--------+
+                  |
+                  v
+          +----------------+
+          | Load Balancer  |
+          +----------------+
 ```
 
-# Project Structure
+## Component responsibilities
 
-```
-.
-├── README.md
-├── cmd
-│   ├── cli
-│   │   ├── cmd
-│   │   │   ├── list.go
-│   │   │   ├── root.go
-│   │   │   ├── start.go
-│   │   │   ├── status.go
-│   │   │   ├── stop.go
-│   │   │   └── version.go
-│   │   └── main.go
-│   ├── loadbalancer
-│   │   └── main.go
-│   ├── orchestrator
-│   │   └── main.go
-│   └── registry
-│       └── main.go
-├── dashboard
-│   └── static
-│       └── dashboard.html
-├── go.mod
-├── go.sum
-├── internal
-│   ├── domain
-│   │   └── service.go
-│   ├── manager
-│   │   └── manager.go
-│   ├── orchestrator
-│   │   └── deployer.go
-│   ├── registry
-│   │   ├── client.go
-│   │   ├── registry.go
-│   │   └── types.go
-│   └── state
-│       └── store.go
-└── orchestrator
-```
+### Orchestrator API
 
-# Features
+The orchestrator API is the control-plane entry point.
 
-### Container Manager
+It is responsible for:
 
-- Start/stop containers via Docker
-- Auto health check via HTTP endpoints
-- Restarts unhealthy containers automatically
-- Removes stopped replicas during scale-down and replacement
+- accepting service definitions and operations
+- storing desired state
+- triggering reconciliation
+- serving service status
+- exposing recent control-plane events
+- serving the dashboard
 
-### Service Discovery
+**Location:**
 
-- Built-in in-memory registry
-- Replicas register under a logical service name
-- Each replica is tracked as a distinct service instance
-- Lookup APIs support both single-instance and multi-instance resolution
-
-### Load Balancer
-
-- Reverse proxy HTTP traffic
-- Distributes requests using round-robin across healthy services
-- Resolves all backends for a logical service through the registry
-
-### Deployment Controller
-
-- Ensures `N` replicas are running for a service
-- Reconciles desired state against actual running containers
-- Replaces missing replicas
-- Generates unique names per replica
+- `cmd/orchestrator`
 
 ### Desired State Store
 
-- Stores service definitions as first-class objects
-- Keeps service name, image, and desired replica count together
-- Acts as the source of truth for deploy, scale, restart, and delete operations
+The desired state store is the source of truth for services.
 
-### REST API
+It is responsible for:
 
-- `POST /deploy` - Deploy a service (legacy-compatible endpoint)
-- `POST /scale/:name/:replicas` - Manually scale a service (legacy-compatible endpoint)
-- `GET /status/:name` - Check service status
-- `GET /logs/:name` - View logs of service containers
-- `GET /api/services` - List desired services with running container data
-- `POST /api/services` - Create or update a service
-- `POST /api/scale/:name/:delta` - Adjust replica counts
-- `POST /api/restart/:name` - Restart all running replicas of a service
-- `DELETE /api/services/:name` - Delete a service and remove its running replicas
+- storing `ServiceSpec` objects in memory
+- persisting them to disk
+- loading them on startup
+- tracking desired replica count and desired generation
+
+**Location:**
+
+- `internal/state`
+
+### Reconciliation Loop
+
+The reconciliation loop is the control-plane core.
+
+It is responsible for:
+
+- comparing desired state to actual running containers
+- starting missing replicas
+- removing extra replicas
+- replacing unhealthy replicas
+- progressing rolling restarts generation by generation
+
+**Location:**
+
+- `internal/orchestrator`
+
+### Container Manager
+
+The container manager is the runtime adapter.
+
+It is responsible for:
+
+- interacting with Docker
+- starting containers
+- stopping and removing containers
+- applying container metadata such as service generation labels
+- registering live backends in the service registry
+- launching health monitors that report into the health tracker
+
+**Location:**
+
+- `internal/manager`
+
+### Health Tracker
+
+The health tracker is the centralized health state store.
+
+It is responsible for:
+
+- recording the latest health result per replica
+- separating health observation from runtime mutation
+- giving the reconciler a consistent source for health-based replacement decisions
+- feeding status reporting
+
+**Location:**
+
+- `internal/health`
+
+### Service Registry
+
+The registry maps one logical service to many concrete instances.
+
+It is responsible for:
+
+- registering service instances
+- deregistering specific instances
+- returning all backends for a service
+- acting as the discovery source for the load balancer
+
+**Locations:**
+
+- `cmd/registry`
+- `internal/registry`
+
+### Load Balancer
+
+The load balancer is the traffic router.
+
+It is responsible for:
+
+- resolving a logical service into its registered backends
+- applying round-robin selection
+- proxying requests to the selected backend
+
+**Location:**
+
+- `cmd/loadbalancer`
+
+### Status Builder
+
+The status builder creates the service view exposed to operators.
+
+It combines:
+
+- desired state
+- runtime state
+- health state
+- rollout state
+
+It reports:
+
+- desired replicas
+- running replicas
+- healthy replicas
+- unhealthy replicas
+- unknown replicas
+- outdated replicas
+- desired generation
+- overall service condition
+
+**Location:**
+
+- `internal/status`
+
+### Dashboard
+
+The dashboard provides a lightweight operator interface.
+
+It is responsible for:
+
+- listing services
+- showing replica health and rollout state
+- showing recent control-plane events
+- allowing scale, restart, and delete actions
+
+**Location:**
+
+- `dashboard/static/dashboard.html`
 
 ### CLI
 
-Command-line tool built with Cobra.
+The CLI is the primary operator interface and communicates exclusively with the orchestrator API.
 
-#### Run without installing (recommended for development)
+It is responsible for:
 
-```sh
-go run ./cmd/cli start --image nginx --name my-nginx
-go run ./cmd/cli stop my-nginx
-go run ./cmd/cli list
-go run ./cmd/cli status my-nginx
-go run ./cmd/cli version
+- deploying services
+- listing services
+- querying service status
+- scaling services
+- requesting rolling restarts
+- deleting services
+- viewing recent control-plane events
+
+**Location:**
+
+- `cmd/cli`
+
+## Service lifecycle
+
+### Create or update a service
+
+1. A client sends `POST /api/services`
+2. The service spec is validated
+3. The desired state store saves the spec
+4. The desired state file is written to disk
+5. The reconciler compares desired state to actual state
+6. Missing replicas are started
+7. Replicas register themselves in the service registry
+8. Health monitors begin reporting observations
+9. Status and events become visible to operators
+
+### Scale a service
+
+1. A client sends `POST /api/services/:name/scale`
+2. The desired replica count is updated in the store
+3. The desired state file is rewritten
+4. The reconciler adds or removes replicas until runtime matches desired state
+
+### Rolling restart a service
+
+1. A client sends `POST /api/services/:name/restart`
+2. The service generation is incremented
+3. The updated desired state is persisted
+4. The reconciler creates new-generation replicas
+5. The reconciler removes outdated replicas gradually
+6. Service status reports `rolling` until outdated replicas are gone
+
+### Replace an unhealthy replica
+
+1. A health monitor probes a running replica
+2. A failure is recorded in the health tracker
+3. During reconciliation, the unhealthy replica is identified
+4. The reconciler removes it
+5. The reconciler starts a replacement if capacity is missing
+
+## Canonical API
+
+### List services
+
+`GET /api/services`
+
+Returns all services with centralized status information.
+
+### Get one service
+
+`GET /api/services/:name`
+
+Returns one service with full status.
+
+### Create or update a service
+
+`POST /api/services`
+
+Example body:
+
+```json
+{
+  "name": "web",
+  "image": "nginx:latest",
+  "replicas": 3
+}
 ```
 
-#### Build locally
+### Scale a service
 
-Build the CLI binary:
+`POST /api/services/:name/scale`
 
-```sh
-go build -o containercli ./cmd/cli
+Example body:
+
+```json
+{
+  "replicas": 5
+}
 ```
 
-Run the binary:
+### Request a rolling restart
 
-```sh
-./containercli start --image nginx --name my-nginx
-./containercli stop my-nginx
-./containercli list
-./containercli status my-nginx
-./containercli version
+`POST /api/services/:name/restart`
+
+### Delete a service
+
+`DELETE /api/services/:name`
+
+### Get logs for a service
+
+`GET /api/services/:name/logs`
+
+### Get recent control-plane events
+
+`GET /api/events`
+
+## CLI usage
+
+The CLI is a control-plane client.
+
+### Deploy a service
+
+```bash
+go run ./cmd/cli deploy --name web --image nginx:latest --replicas 3
 ```
 
-#### Install globally (optional)
+### List services
 
-Install the binary into your system PATH:
-
-```sh
-go build -o /usr/local/bin/containercli ./cmd/cli
+```bash
+go run ./cmd/cli services
 ```
 
-Run the binary:
+### Get one service
 
-```sh
-containercli start --image nginx --name my-nginx
+```bash
+go run ./cmd/cli get web
 ```
 
-### Web Dashboard
+### Scale a service
 
-- `GET /api/services` - Lists services, images, desired replicas, and running replicas
-- `POST /api/scale/:name/:delta` - Adjusts replica counts
-- `POST /api/restart/:name`- Redeploys containers of a service
-- `DELETE /api/services/:name`- Deletes a service
-- `http://localhost:8080/`
-
-# Setup Instructions
-
-## Prerequisites
-
-- Docker daemon running
-- Go 1.24+
-- Ports 8000, 8080, and 9000 must be free
-
-## Build & Run
-
-Start the 3 main services in separate terminals:
-
-Start the service registry
-
-```sh
-go run cmd/registry/main.go
+```bash
+go run ./cmd/cli scale web --replicas 5
 ```
 
-Start the load balancer
+### Request a rolling restart
 
-```sh
-go run cmd/loadbalancer/main.go
+```bash
+go run ./cmd/cli restart web
 ```
 
-Start the orchestrator
+### Delete a service
 
-```sh
-go run cmd/orchestrator/main.go
+```bash
+go run ./cmd/cli delete web
 ```
 
-# API
+### Show recent events
 
-Example deployment:
-
-```sh
-curl -X POST localhost:8080/deploy \
- -H "Content-Type: application/json" \
- -d '{"name":"nginx-service", "image":"nginx:latest", "replicas":3}'
+```bash
+go run ./cmd/cli events
 ```
 
-Example service creation through the newer API:
+### Target a different orchestrator API server
 
-```sh
-curl -X POST localhost:8080/api/services \
- -H "Content-Type: application/json" \
- -d '{"name":"nginx-service","image":"nginx:latest","replicas":3}'
+```bash
+go run ./cmd/cli services --server http://localhost:8080
 ```
 
-Example scale:
+## Service state and persistence
 
-```sh
-curl -X POST localhost:8080/scale/nginx-service/5
+Desired service definitions are persisted to:
+
+```
+data/services.json
 ```
 
-Example dashboard-style scale adjustment:
+This file is part of the system’s native runtime contract. Persisted service specs are expected to match the current format, including a valid positive service generation.
 
-```sh
-curl -X POST localhost:8080/api/scale/nginx-service/1
+On startup:
+
+- the orchestrator loads the saved desired state
+- the reconciler uses that desired state as its source of truth
+- running containers are converged toward that state
+
+This means a process restart does not erase the services the system is meant to maintain.
+
+## Status model
+
+Each service reports:
+
+- `desiredReplicas`
+- `runningReplicas`
+- `healthyReplicas`
+- `unhealthyReplicas`
+- `unknownReplicas`
+- `outdatedReplicas`
+- `generation`
+- `overallStatus`
+
+Each replica reports:
+
+- runtime status
+- health status
+- generation
+- whether it is outdated relative to the desired generation
+- last health error when applicable
+
+### Overall status meanings
+
+- `progressing` — running replicas are still below desired capacity
+- `rolling` — outdated replicas are still live during a generation transition
+- `degraded` — one or more replicas are explicitly unhealthy
+- `starting` — replicas exist but some have not yet completed health checks
+- `healthy` — service is fully converged, healthy, and current
+
+## Event model
+
+The platform records recent control-plane activity in memory.
+
+Examples include:
+
+- service writes through the API
+- scale requests
+- rolling restart requests
+- replica creation and removal
+- health failures
+- reconcile-driven replacement actions
+
+Events are exposed through:
+
+```
+GET /api/events
 ```
 
-Check status:
+and surfaced in the dashboard and CLI.
 
-```sh
-curl localhost:8080/status/nginx-service
+## Testing
+
+Run the full test suite with:
+
+```bash
+go test ./...
 ```
 
-Delete a service:
+Current smoke coverage includes:
 
-```sh
-curl -X DELETE localhost:8080/api/services/nginx-service
-```
+- desired-state persistence round-trip
+- multi-instance registry semantics
+- rollout-aware status computation
 
-# Design Philosophy
+## Design principles
 
-- Modular: Each subsystem (CLI, registry, desired-state store, deployer) is isolated.
-- Control Plane Oriented: Services are stored as desired state and reconciled toward runtime state.
-- Distributed Concepts: Mirrors real-world microservice coordination.
-- Professional: Built from first principles with clear comments and logs.
-- Resilient: Restarts dead containers and load balances HTTP traffic across replicas.
+### Service-oriented control plane
 
-# Testing and Debugging
+The platform manages **services**, not ad hoc container actions. Users declare the desired service state, and the control plane works to realize it.
 
-- Logs output to terminal (health checks, deploy actions, scaling)
-- Health check interval: 30s
-- Registry stores multiple instances per logical service
-- Dynamic replica naming ensures unique deployments
+### Reconciliation owns mutation
 
-# Example Use Case
+Health checking does not restart containers directly. Observers report state, and the reconciler decides how runtime state should change.
 
-- Start nginx service with 3 replicas
-- Desired state is stored in the service store
-- The deployment controller ensures 3 running replicas exist
-- Health checks restart unhealthy containers
-- The registry tracks all replicas under one logical service
-- The load balancer routes requests to any of the 3 replicas
+### Logical service identity is distinct from replica identity
 
-# License
+A service such as `web` may have many replicas. Discovery, status, and load balancing all operate on the logical service, not on individual container names.
 
-MIT License
+### Rolling restart is a desired-state change
 
-# Author
+Restart is implemented by bumping the desired generation, not by stopping everything at once.
 
-Benas Stelmokas
+### Operator visibility matters
+
+The platform exposes health state, rollout state, recent events, and replica details so behavior is inspectable and debuggable.
+
+## Scope and limitations
+
+This project is intentionally focused and single-node.
+
+Current scope limits include:
+
+- single-host orchestration
+- Docker-only runtime backend
+- in-memory health state
+- in-memory event history
+- no authentication or RBAC
+- no distributed consensus or leader election
+- no multi-node scheduling
+- no persistent historical metrics pipeline
+- no advanced production autoscaling system in the current codebase
+
+These are scope choices, not architectural accidents.
+
+## Project goal
+
+This repository is meant to demonstrate the ability to design and implement a coherent small control plane with real orchestration ideas:
+
+- desired state
+- reconciliation
+- service discovery
+- health-driven replacement
+- rolling updates
+- status reporting
+- operator tooling
+
+It is compact by design, but the system model is real.
+
+---
