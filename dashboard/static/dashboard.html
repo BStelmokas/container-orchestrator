@@ -168,12 +168,12 @@
           container.appendChild(div);
 
           const buttons = div.querySelectorAll("button");
-          buttons[0].onClick = () =>
+          buttons[0].onclick = () =>
             scaleTo(service.name, service.desiredReplicas + 1);
-          buttons[1].onClick = () =>
+          buttons[1].onclick = () =>
             scaleTo(service.name, Math.max(1, service.desiredReplicas - 1));
-          buttons[2].onClick = () => restartService(service.name);
-          buttons[3].onClick = () => deleteService(service.name);
+          buttons[2].onclick = () => restartService(service.name);
+          buttons[3].onclick = () => deleteService(service.name);
         }
       }
 
