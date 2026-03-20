@@ -1,6 +1,6 @@
 # Container Orchestrator
 
-An orchestration platform written in Go.
+A container orchestration platform written in Go, using Docker as the runtime.
 
 This project implements the core control-plane ideas behind container orchestration systems in a compact, understandable codebase. It manages containerized services through a service-oriented API, maintains desired state, reconciles runtime state, observes health centrally, performs rolling restarts, persists service definitions, registers live replicas for discovery, and routes traffic across service backends through a load balancer.
 
