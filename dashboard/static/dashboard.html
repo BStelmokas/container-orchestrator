@@ -65,6 +65,13 @@
         font-size: 0.85rem;
       }
 
+      .container-rollout {
+        display: inline-block;
+        margin-left: 0.5rem;
+        color: #92400e;
+        font-size: 0.85rem;
+      }
+
       .event {
         padding: 0.6rem 0;
         border-bottom: 1px solid #e5e7eb;
@@ -144,6 +151,7 @@
               <div class="container">
                 ${c.containerName} (${c.containerID}) -  ${c.runtimeStatus}
                 <span class="container-health">health: ${c.healthStatus}</span>
+                <span class="container-rollout">generation: ${c.generation}${c.outdated ? " (outdated)" : ""}</span>
                 ${c.lastError ? `<span class="container-error">reason: ${c.lastError}</span>` : ""}
               </div>`;
           }

@@ -144,10 +144,10 @@ func (b *Builder) buildServiceStatus(name, image string, desired int, generation
 
 	// Derive one clear overall status for the service.
 	switch {
-	case status.OutdatedReplicas > 0:
-		status.OverallStatus = "rolling"
 	case status.RunningReplicas < status.DesiredReplicas:
 		status.OverallStatus = "progressing"
+	case status.OutdatedReplicas > 0:
+		status.OverallStatus = "rolling"
 	case status.UnhealthyReplicas > 0:
 		status.OverallStatus = "degraded"
 	case status.UnknownReplicas > 0:
