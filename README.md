@@ -52,13 +52,11 @@ go run ./cmd/cli events
 go run ./cmd/cli delete web
 ```
 
-Open the dashboard:
+The dashboard:
 
 ```
 http://localhost:8080
 ```
-
-This demonstrates the control-plane lifecycle: deploy → reconcile → scale → rolling restart → observe.
 
 ---
 
