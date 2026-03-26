@@ -60,7 +60,7 @@ func main() {
 
 		instance, err := lb.selectBackend(serviceName)
 		if err != nil {
-			log.Printf("[LoadBalancer] Failed to lookup servide %q: %v", serviceName, err)
+			log.Printf("[LoadBalancer] Failed to lookup service %q: %v", serviceName, err)
 			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to resolve backend"})
 			return
 		}
